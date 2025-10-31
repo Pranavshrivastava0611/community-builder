@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 // @ts-ignore
@@ -78,53 +79,44 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen p-8 bg-linear-to-br from-blue-900 to-indigo-900 text-white font-sans">
-      <div className="max-w-3xl mx-auto bg-white bg-opacity-10 backdrop-filter backdrop-blur-lg p-10 rounded-2xl shadow-2xl border border-white border-opacity-20">
-        <h1 className="text-5xl font-extrabold mb-8 text-center leading-tight">My Profile</h1>
-
-        <div className="flex flex-col items-center mb-8">
-          {userProfile.avatar_url ? (
-            <img src={userProfile.avatar_url} alt="Avatar" className="w-32 h-32 rounded-full object-cover border-4 border-purple-500 shadow-lg" />
-          ) : (
-            <div className="w-32 h-32 rounded-full bg-gray-700 flex items-center justify-center text-5xl font-bold text-gray-300 border-4 border-purple-500 shadow-lg">
-              {userProfile.username ? userProfile.username.charAt(0).toUpperCase() : 'U'}
-            </div>
-          )}
-          <h2 className="text-3xl font-bold mt-4">{userProfile.username}</h2>
-          <p className="font-mono text-sm opacity-70 break-all">{userProfile.public_key}</p>
-        </div>
-
-        {userProfile.bio && (
-          <div className="mb-8 p-6 bg-white bg-opacity-5 rounded-lg shadow-inner">
-            <h3 className="text-2xl font-semibold mb-3">About Me</h3>
-            <p className="text-lg opacity-90 leading-relaxed">{userProfile.bio}</p>
-          </div>
-        )}
-
-        {/* Placeholder for future sections */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-          <div className="bg-white bg-opacity-5 p-6 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold mb-3">Badges Earned</h3>
-            <p className="opacity-70">No badges yet. Keep engaging!</p>
-            {/* Dynamically render badges here */}
-          </div>
-          <div className="bg-white bg-opacity-5 p-6 rounded-lg shadow-md">
-            <h3 className="text-xl font-semibold mb-3">Community Contributions</h3>
-            <p className="opacity-70">Start contributing to communities!</p>
-            {/* Dynamically render contributions here */}
-          </div>
-        </div>
-
-        <div className="text-center mt-12">
-          <button 
-            onClick={() => router.push('/')}
-            className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-lg shadow-lg transition duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75"
-          >
-            Back to Home
+    <div className="min-h-screen flex flex-col bg-black text-white font-sans">
+      <header className="w-full px-8 py-6 flex justify-between items-center border-b border-white/10 shadow-lg">
+        <h1 className="text-3xl font-extrabold tracking-tight">My Profile</h1>
+        <Link href="/">
+          <button className="px-5 py-2 bg-white text-black font-semibold rounded-full shadow hover:bg-gray-200 transition">
+            Home
           </button>
+        </Link>
+      </header>
+      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 text-center">
+        <div className="bg-white bg-opacity-5 p-10 rounded-2xl shadow-2xl border border-white/10 max-w-lg w-full">
+          <h2 className="text-4xl font-bold mb-6">Welcome, <span className="text-white">{userProfile.username || `User ${userProfile.public_key?.substring(0, 6)}`}</span></h2>
+          <div className="mb-6">
+            <p className="text-lg text-gray-300">Public Key:</p>
+            <p className="text-md text-gray-400 break-all font-mono">{userProfile.public_key || "Not available"}</p>
+          </div>
+          <div className="mb-6">
+            <p className="text-lg text-gray-300">Badges & Contributions:</p>
+            <div className="flex flex-wrap gap-2 justify-center mt-2">
+              <span className="px-4 py-1 bg-black border border-white text-white rounded-full text-sm shadow">Early Adopter</span>
+              <span className="px-4 py-1 bg-black border border-white text-white rounded-full text-sm shadow">Builder</span>
+              <span className="px-4 py-1 bg-black border border-white text-white rounded-full text-sm shadow">Community Member</span>
+            </div>
+          </div>
+          <div className="mb-6">
+            <p className="text-lg text-gray-300">About Me:</p>
+            <p className="text-md text-gray-400">Passionate about Solana and Web3. Always learning, building, and sharing.</p>
+          </div>
+          <Link href="/">
+            <button className="mt-6 px-6 py-2 bg-white text-black font-semibold rounded-full shadow hover:bg-gray-200 transition">
+              Back to Home
+            </button>
+          </Link>
         </div>
-
-      </div>
+      </main>
+      <footer className="w-full px-8 py-6 text-center text-gray-500 text-sm border-t border-white/10">
+        &copy; {new Date().getFullYear()} Solana Community. All rights reserved.
+      </footer>
     </div>
   );
 }

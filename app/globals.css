@@ -1,24 +1,38 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700&display=swap');
 @import "@solana/wallet-adapter-react-ui/styles.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-primary: #3b82f6; /* Blue-500 */
+  --color-secondary: #8b5cf6; /* Violet-500 */
+  --color-accent: #10b981; /* Green-500 */
+  --color-text-light: #f3f4f6; /* Gray-100 */
+  --color-text-dark: #1f2937; /* Gray-800 */
+  --color-bg-light: #ffffff;
+  --color-bg-dark: #0f172a; /* Slate-900 */
+
+  /* Classic font stack */
+  --font-heading: 'Playfair Display', serif;
+  --font-body: 'DM Sans', sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --color-text-light: #e2e8f0; /* Slate-200 */
+    --color-text-dark: #f8fafc; /* Slate-50 */
+    --color-bg-light: #1e293b; /* Slate-800 */
+    --color-bg-dark: #0f172a; /* Slate-900 */
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'DM Sans', Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  color: var(--color-text-dark);
+  background-color: var(--color-bg-light);
 }
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
+  
