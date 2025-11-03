@@ -9,7 +9,6 @@ import { Connection, Transaction, clusterApiUrl } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
-import DLMMPkg from "@meteora-ag/dlmm";
 
 // No longer need Pinata API keys on the frontend
 // const PINATA_API_KEY = process.env.NEXT_PUBLIC_PINATA_API_KEY;
@@ -204,7 +203,30 @@ export default function CreateCommunityPage() {
         
         throw new Error(errorMessage);
       }
-  
+       // ============================================
+       console.log('Adding initial liquidity to pool...');
+       const initialSolAmount = 0.1; // 0.1 SOL
+       const initialTokenAmount = 1000; // 1000 of your new community token
+       // Convert amounts to base units (with decimals)
+       const tokenAmountBaseUnits = (initialTokenAmount * Math.pow(10, parseInt(tokenDecimals))).toString();
+       const solAmountBaseUnits = (initialSolAmount * Math.pow(10, 9)).toString(); // SOL has 9 decimals
+ 
+       const addLiquiditySignature = await handleAddLiquidity(
+         communityId,
+         lbPairAddress,
+         tokenAmountBaseUnits,
+         solAmountBaseUnits,
+         publicKey.toBase58(),
+         100, // 1% slippage
+       );
+ 
+       setSuccess(`✅ Liquidity added! Signature: ${addLiquiditySignature.slice(0, 8)}...`);
+ 
+       // ============================================
+       // SUCCESS! Redirect to communities page
+       // ============================================
+       setSuccess(`🎉 Community created successfully! Redirecting...`);
+       setTimeout(() => router.push('/communities'), 3000);
     } catch (error: any) {
       console.error('Error creating liquidity pool:', error);
       setError(`Failed to create liquidity pool: ${error.message || 'Unknown error'}`);
@@ -214,6 +236,168 @@ export default function CreateCommunityPage() {
     }
   }
 
+  async function handleAddLiquidity(
+    communityId: string,
+    lbPairAddress: string,
+    tokenXAmount: string,
+    tokenYAmount: string,
+    userPublicKey: string,
+    slippageBps: number = 100
+  ): Promise<string> {
+    try {
+      setLoading(true);
+      setSuccess('Preparing to add liquidity...');
+  
+      // INCREASED DELAY: Wait longer for pool to be fully propagated
+      // This gives Solana time to fully commit the pool creation transaction
+      console.log('Waiting 8 seconds for pool to propagate on-chain...');
+      await new Promise(resolve => setTimeout(resolve, 8000)); // Increased from 3000 to 8000ms
+  
+      setSuccess('Pool propagated, creating add liquidity transaction...');
+  
+      const response = await fetch('/api/liquidity/add', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        body: JSON.stringify({
+          communityId,
+          lbPairAddress,
+          tokenXAmount,
+          tokenYAmount,
+          userPublicKey,
+          slippageBps,
+        }),
+      });
+  
+      const data = await response.json();
+  
+      if (!response.ok) {
+        // If we get a 504 timeout, suggest retrying
+        if (response.status === 504) {
+          throw new Error(`${data.error}\n\nThe pool is still being created. Please wait a moment and try the "Add Liquidity" action again from the community page.`);
+        }
+        throw new Error(data.error || 'Failed to create add liquidity transaction');
+      }
+  
+      console.log('Add Liquidity API Response:', data);
+  
+      const serializedTransaction = data.serializedTransaction;
+  
+      // Decode the transaction
+      const transaction = Transaction.from(bs58.decode(serializedTransaction));
+  
+      console.log('Debugging Add Liquidity Transaction:');
+      console.log('Transaction instructions:', transaction.instructions.length);
+      transaction.instructions.forEach((instruction, index) => {
+        console.log(`Instruction ${index}:`);
+        console.log(`  Program ID: ${instruction.programId.toBase58()}`);
+        console.log(`  Keys (${instruction.keys.length}):`, 
+          instruction.keys.map(key => ({ 
+            pubkey: key.pubkey.toBase58(), 
+            isSigner: key.isSigner, 
+            isWritable: key.isWritable 
+          }))
+        );
+        console.log(`  Data length:`, instruction.data.length);
+      });
+  
+      // CRITICAL: Get a fresh blockhash before sending
+      try {
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
+        
+        // Ensure feePayer is set to the connected wallet
+        if (!transaction.feePayer || !transaction.feePayer.equals(publicKey!)) {
+          transaction.feePayer = publicKey!;
+        }
+        
+        console.log('Updated with fresh blockhash:', blockhash);
+        console.log('Last valid block height:', lastValidBlockHeight);
+  
+        // Validate transaction before sending
+        if (!transaction.feePayer) {
+          throw new Error('Transaction missing feePayer');
+        }
+  
+        if (!transaction.recentBlockhash) {
+          throw new Error('Transaction missing recentBlockhash');
+        }
+  
+        if (!publicKey) {
+          throw new Error('Wallet not connected');
+        }
+  
+        console.log('Sending add liquidity transaction...');
+        
+        setSuccess('Please approve the transaction in your wallet...');
+        
+        // Send the transaction with proper options
+        const signature = await sendTransaction(transaction, connection, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+          maxRetries: 3,
+        });
+  
+        console.log('Add liquidity transaction sent! Signature:', signature);
+        
+        setSuccess(`Add liquidity transaction sent: ${signature.slice(0, 8)}...`);
+  
+        // Wait for confirmation with the blockhash info
+        console.log('Waiting for confirmation...');
+        const confirmation = await connection.confirmTransaction({
+          signature,
+          blockhash: transaction.recentBlockhash,
+          lastValidBlockHeight: transaction.lastValidBlockHeight!,
+        }, 'confirmed');
+  
+        if (confirmation.value.err) {
+          throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+        }
+  
+        console.log('Add liquidity transaction confirmed!');
+        setSuccess(`✅ Liquidity added successfully!\nBins: ${data.minBinId} to ${data.maxBinId}\nTransaction: ${signature.slice(0, 8)}...`);
+  
+        return signature;
+  
+      } catch (txError: any) {
+        console.error('Add Liquidity Transaction Error Details:', txError);
+        
+        // Log transaction logs if available
+        if (txError.logs) {
+          console.error('Transaction logs:', txError.logs);
+        }
+        
+        // Provide user-friendly error messages
+        let errorMessage = 'Unknown error occurred';
+        
+        if (txError.message?.includes('Blockhash not found')) {
+          errorMessage = 'Transaction expired. Please try again.';
+        } else if (txError.message?.includes('insufficient funds')) {
+          errorMessage = 'Insufficient SOL for transaction fees. Please add more SOL to your wallet.';
+        } else if (txError.message?.includes('User rejected')) {
+          errorMessage = 'Transaction rejected by user.';
+        } else if (txError.message?.includes('0x1')) {
+          errorMessage = 'Insufficient funds for rent or transaction. Please add more SOL.';
+        } else if (txError.message?.includes('custom program error: 0x0')) {
+          errorMessage = 'Program error: Invalid liquidity parameters or pool state.';
+        } else {
+          errorMessage = txError.message || String(txError);
+        }
+        
+        throw new Error(errorMessage);
+      }
+  
+    } catch (error: any) {
+      console.error('Error adding liquidity:', error);
+      setError(`Failed to add liquidity: ${error.message || 'Unknown error'}`);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -416,18 +600,7 @@ export default function CreateCommunityPage() {
       const userPublicKey = publicKey.toBase58();
 
       console.log(`Adding initial liquidity (${initialSolAmount} SOL, ${initialTokenAmount} ${tokenSymbol}) to the pool...`);
-      console.log('Parameters for handleCreateLiquidityPool:', {
-        communityId: communityRecordId,
-        tokenMintAddress,
-        initialSolAmount,
-        initialTokenAmount,
-        tokenDecimals: parseInt(tokenDecimals),
-        createPool: true,
-        binStep,
-        feeTier,
-        initialPrice
-      });
-      await handleCreateLiquidityPool(
+     const {lbPairAddress} =  await handleCreateLiquidityPool(
         communityRecordId,
         tokenMintAddress,
         initialSolAmount,
@@ -440,7 +613,7 @@ export default function CreateCommunityPage() {
         userPublicKey,
       );
 
-      // setTimeout(() => router.push('/communities'), 3000);
+     
 
     } catch (err: any) {
       setError(err.message || 'Failed to create community.');
@@ -448,6 +621,8 @@ export default function CreateCommunityPage() {
       setLoading(false);
     }
   };
+
+    
 
   return (
     <div className="min-h-screen bg-color-bg-dark relative font-body text-color-text-light overflow-hidden">

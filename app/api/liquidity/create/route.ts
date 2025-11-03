@@ -1,11 +1,11 @@
 // app/api/liquidity/create/route.ts
-import { NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
-import { createClient } from "@supabase/supabase-js";
-import { Connection, PublicKey, Transaction } from "@solana/web3.js";
-import bs58 from "bs58";
 import DLMM from "@meteora-ag/dlmm";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { createClient } from "@supabase/supabase-js";
 import BN from "bn.js";
+import bs58 from "bs58";
+import jwt from "jsonwebtoken";
+import { NextResponse } from "next/server";
 
 // ------------------------
 // Supabase admin client
@@ -190,6 +190,33 @@ export async function POST(req: Request) {
     if (updateError) {
       console.error("Failed to update community with LB pair address:", updateError);
       throw new Error("Failed to save pool address to database");
+    }
+
+    // --- Call /api/liquidity/add to add liquidity ---
+    try {
+      const addRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/liquidity/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: req.headers.get('Authorization') || '',
+        },
+        body: JSON.stringify({
+          communityId,
+          lbPairAddress: lbPairAddress.toBase58(),
+          tokenXAmount: tokenAmount,   // Note: swap these if needed
+          tokenYAmount: solAmount,     // Note: swap these if needed
+          userPublicKey,
+          slippageBps: 100
+        })
+      });
+      const addData = await addRes.json();
+      if (!addRes.ok) {
+        console.error("/api/liquidity/add error:", addData.error || addData);
+      } else {
+        console.log("Add liquidity result:", addData);
+      }
+    } catch (addErr) {
+      console.error("Failed to call /api/liquidity/add:", addErr);
     }
 
     return NextResponse.json(
