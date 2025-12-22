@@ -1,10 +1,9 @@
 "use client";
 
 import GlassPanel from "@/components/GlassPanel";
-import GlowBackground from "@/components/GlowBackground";
-import { motion } from "framer-motion";
 import GlowButton from "@/components/GlowButton";
 import Navbar from "@/components/Navbar";
+import { motion } from "framer-motion";
 import Link from "next/link";
 
 const communities = [
@@ -54,21 +53,30 @@ const communities = [
 
 export default function CommunityPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#f8fafc] to-[#e8edf3] text-[#1a1f2b] font-body overflow-hidden">
+    <div className="min-h-screen bg-black text-white font-sans relative overflow-hidden selection:bg-orange-500/30">
+
+      {/* Background Visuals */}
+      <div
+        className="absolute inset-0 z-0 bg-grid-pattern pointer-events-none"
+        style={{ maskImage: 'linear-gradient(to bottom, black 20%, transparent 90%)' }}
+      ></div>
+      <div className="absolute top-0 right-1/4 w-[800px] h-[600px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen opacity-50"></div>
+      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none opacity-40"></div>
+
       <Navbar />
-      <main className="relative z-10 flex flex-col md:flex-row gap-10 px-4 md:px-10 pt-28 pb-16 max-w-7xl mx-auto transition-all duration-500">
+      <main className="relative z-10 flex flex-col md:flex-row gap-10 px-4 md:px-10 pt-12 pb-16 max-w-7xl mx-auto transition-all duration-500">
         {/* Sidebar Filters */}
-        <GlassPanel className="hidden md:flex flex-col gap-5 p-6 min-w-[260px] h-fit md:sticky top-28 self-start bg-white/70 backdrop-blur-md border border-slate-200 shadow-md rounded-2xl">
-          <h3 className="text-2xl font-heading font-semibold text-[#1e3a8a] mb-4">
+        <GlassPanel className="hidden md:flex flex-col gap-5 p-6 min-w-[260px] h-fit md:sticky top-28 self-start">
+          <h3 className="text-2xl font-bold font-heading text-white mb-4">
             Filters
           </h3>
-          <GlowButton className="w-full text-lg py-3 bg-[#2563eb] text-white hover:bg-[#1e40af] transition-all duration-300">
+          <GlowButton className="w-full text-lg py-3">
             Most Active
           </GlowButton>
-          <GlowButton className="w-full text-lg py-3 bg-[#2563eb] text-white hover:bg-[#1e40af] transition-all duration-300">
+          <GlowButton className="w-full text-lg py-3 !bg-none !bg-white/5 border border-white/10 !text-gray-300 hover:!text-white hover:!border-orange-500/50 hover:!bg-white/10">
             Newest
           </GlowButton>
-          <GlowButton className="w-full text-lg py-3 bg-[#2563eb] text-white hover:bg-[#1e40af] transition-all duration-300">
+          <GlowButton className="w-full text-lg py-3 !bg-none !bg-white/5 border border-white/10 !text-gray-300 hover:!text-white hover:!border-orange-500/50 hover:!bg-white/10">
             Top Earning
           </GlowButton>
         </GlassPanel>
@@ -81,20 +89,20 @@ export default function CommunityPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="text-5xl sm:text-6xl font-heading font-extrabold text-[#0f172a] text-center sm:text-left"
+              className="text-5xl sm:text-6xl font-black font-heading text-white text-center sm:text-left tracking-tighter"
             >
-              Explore Communities
+              Explore <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-200">Communities</span>
             </motion.h2>
 
             {/* Search Bar */}
-            <div className="w-full sm:w-96 relative">
+            <div className="w-full sm:w-96 relative group">
               <input
                 type="text"
                 placeholder="Search communities..."
-                className="w-full px-6 py-3 rounded-full bg-white/80 border border-slate-300 text-[#1e293b] placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563eb] focus:border-[#2563eb] transition-all duration-300 pl-12 shadow-sm"
+                className="w-full px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-300 pl-12 shadow-sm group-hover:bg-white/10"
               />
               <svg
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400"
+                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-hover:text-orange-400 transition-colors"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -121,32 +129,39 @@ export default function CommunityPage() {
                 <motion.div
                   whileHover={{
                     scale: 1.02,
-                    boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                    boxShadow: "0 10px 30px rgba(249, 115, 22, 0.15)",
                   }}
-                  className="relative block group transition-all duration-500"
+                  className="relative block group transition-all duration-500 h-full"
                 >
-                  <GlassPanel className="overflow-hidden border border-slate-200 group-hover:border-blue-400 rounded-2xl bg-white/90 backdrop-blur-sm transition duration-500 shadow-md hover:shadow-lg">
-                    <div className="relative h-48 overflow-hidden rounded-t-2xl">
+                  <GlassPanel className="h-full overflow-hidden border border-white/10 group-hover:border-orange-500/50 rounded-2xl bg-white/5 backdrop-blur-sm transition duration-500 shadow-lg hover:shadow-orange-500/10 flex flex-col">
+                    <div className="relative h-48 overflow-hidden rounded-t-2xl flex-shrink-0">
+                      <div className="absolute inset-0 bg-gray-800 animate-pulse"></div>
                       <img
                         src={c.banner}
                         alt={c.name}
-                        className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700 ease-out"
+                        className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700 ease-out relative z-10"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/10 to-transparent"></div>
-                      <div className="absolute bottom-0 left-0 p-5 text-white">
-                        <h3 className="text-2xl font-heading font-semibold mb-1">
+                      {/* Fallback gradient if image fails or loading */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-black hover:from-gray-700 transition-colors -z-0"></div>
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-20"></div>
+                      <div className="absolute bottom-0 left-0 p-5 text-white z-30">
+                        <h3 className="text-2xl font-bold font-heading mb-1 tracking-tight">
                           {c.name}
                         </h3>
-                        <p className="text-sm opacity-90">
-                          {c.members} members
+                        <p className="text-xs font-mono text-orange-400 bg-black/50 px-2 py-1 rounded inline-block">
+                          {c.members.toLocaleString()} members
                         </p>
                       </div>
                     </div>
-                    <div className="p-6">
-                      <p className="text-slate-600 mb-5 text-base leading-relaxed">
+                    <div className="p-6 flex flex-col flex-1">
+                      <p className="text-gray-400 mb-6 text-sm leading-relaxed flex-1">
                         {c.desc}
                       </p>
-                      <GlowButton className="w-full text-lg py-3 bg-[#2563eb] text-white hover:bg-[#1e40af] transition-all duration-300">
+                      <GlowButton className="w-full text-sm py-2">
                         View Community
                       </GlowButton>
                     </div>
@@ -159,34 +174,19 @@ export default function CommunityPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 w-full px-8 py-8 text-center border-t border-slate-200 bg-white/80 backdrop-blur-md mt-10 rounded-t-2xl shadow-inner">
+      <footer className="relative z-10 w-full px-8 py-8 text-center border-t border-white/10 bg-black/40 backdrop-blur-md mt-10 rounded-t-2xl">
         <div className="flex justify-center gap-6 mb-3">
-          <a
-            href="https://twitter.com/solana"
-            target="_blank"
-            rel="noopener"
-            className="hover:text-[#2563eb] transition text-slate-600"
-          >
-            Twitter
-          </a>
-          <a
-            href="https://docs.solana.com/"
-            target="_blank"
-            rel="noopener"
-            className="hover:text-[#2563eb] transition text-slate-600"
-          >
-            Docs
-          </a>
-          <a
-            href="https://discord.com/invite/solana"
-            target="_blank"
-            rel="noopener"
-            className="hover:text-[#2563eb] transition text-slate-600"
-          >
-            Discord
-          </a>
+          {['Twitter', 'Docs', 'Discord'].map(link => (
+            <a
+              key={link}
+              href="#"
+              className="hover:text-orange-500 transition text-gray-500 text-sm font-medium"
+            >
+              {link}
+            </a>
+          ))}
         </div>
-        <p className="text-slate-500 text-sm">
+        <p className="text-gray-600 text-xs">
           &copy; {new Date().getFullYear()} Solana Community — Crafted with precision.
         </p>
       </footer>

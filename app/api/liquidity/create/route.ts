@@ -129,18 +129,41 @@ export async function POST(req: Request) {
       METEORA_DLMM_PROGRAM_ID
     );
 
+    // Verify preset parameter exists
+    const presetParamAccount = await solanaConnection.getAccountInfo(presetParameter);
+    if (!presetParamAccount) {
+        throw new Error(`Preset parameter account ${presetParameter.toBase58()} not found for bin step ${binStep}. Please try a standard bin step (e.g. 100).`);
+    }
+
     // Calculate active bin ID from initial price
     // activeId determines the starting price bin
     // Formula: activeId = log(price) / log(1 + binStep/10000)
-    const pricePerBin = 1 + binStep / 10000;
-    const activeId = new BN(Math.floor(Math.log(initialPrice) / Math.log(pricePerBin)));
+    
+    // CRITICAL: Sort mints.
+    // DLMM requires TokenX < TokenY.
+    // Use Buffer comparison for deterministic sorting.
+    let mintX = tokenXMint;
+    let mintY = tokenYMint;
+    let price = initialPrice;
 
-    // Create the LB pair using the correct signature
+    if (Buffer.compare(tokenXMint.toBuffer(), tokenYMint.toBuffer()) > 0) {
+        mintX = tokenYMint; // SOL becomes X
+        mintY = tokenXMint; // Token becomes Y
+        // If X=SOL and Y=Token, price (Y/X) is Token/SOL.
+        // User inputs Price = SOL/Token.
+        // So we must invert.
+        price = 1.0 / initialPrice;
+    }
+
+    const pricePerBin = 1 + binStep / 10000;
+    const activeId = new BN(Math.floor(Math.log(price) / Math.log(pricePerBin)));
+
+    // Create the LB pair using the correct signature and SORTED mints
     const createTx = await DLMM.createLbPair(
       solanaConnection,
       ownerPubkey, // funder
-      tokenXMint, // tokenX
-      tokenYMint, // tokenY
+      mintX, // tokenX (sorted)
+      mintY, // tokenY (sorted)
       new BN(binStep), // binStep
       baseFactor, // baseFactor
       presetParameter, // presetParameter PDA
@@ -159,16 +182,22 @@ export async function POST(req: Request) {
       throw new Error("Failed to create LB pair transaction");
     }
 
-    // Derive the LB pair address (it's a PDA)
-    const [lbPairAddress] = PublicKey.findProgramAddressSync(
-      [
-        Buffer.from("lb_pair"),
-        tokenXMint.toBuffer(),
-        tokenYMint.toBuffer(),
-        new BN(binStep).toArrayLike(Buffer, "le", 2),
-      ],
-      METEORA_DLMM_PROGRAM_ID
+    // Extract valid LB Pair Address directly from the transaction instructions
+    // This avoids manual PDA derivation errors and ensures we track the true account
+    const createIx = tx.instructions.find(ix => 
+      ix.programId.equals(METEORA_DLMM_PROGRAM_ID)
     );
+
+    if (!createIx) {
+      throw new Error("No Meteora DLMM instruction found in the generated transaction.");
+    }
+    if (!createIx.keys[0].isWritable) {
+  throw new Error("LB Pair account not writable — instruction layout changed");
+}
+
+    // The LB Pair account is the first account in the InitializeLbPair instruction
+    const lbPairAddress = createIx.keys[0].pubkey;
+    console.log("✅ Extracted LB Pair Address from transaction:", lbPairAddress.toBase58());
 
     // Add recent blockhash and fee payer
     const { blockhash } = await solanaConnection.getLatestBlockhash("finalized");
@@ -181,43 +210,12 @@ export async function POST(req: Request) {
       verifySignatures: false,
     });
 
-    // Store the LB pair address in the database
-    const { error: updateError } = await supabaseAdmin
-      .from("communities")
-      .update({ meteora_lb_pair_address: lbPairAddress.toBase58() })
-      .eq("id", communityId);
+    // NOTE: We do NOT save the address to DB here anymore.
+    // The client must sign, send, confirm, VERIFY the account exists, and then call /api/community/update-pool
 
-    if (updateError) {
-      console.error("Failed to update community with LB pair address:", updateError);
-      throw new Error("Failed to save pool address to database");
-    }
 
-    // --- Call /api/liquidity/add to add liquidity ---
-    try {
-      const addRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/liquidity/add`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: req.headers.get('Authorization') || '',
-        },
-        body: JSON.stringify({
-          communityId,
-          lbPairAddress: lbPairAddress.toBase58(),
-          tokenXAmount: tokenAmount,   // Note: swap these if needed
-          tokenYAmount: solAmount,     // Note: swap these if needed
-          userPublicKey,
-          slippageBps: 100
-        })
-      });
-      const addData = await addRes.json();
-      if (!addRes.ok) {
-        console.error("/api/liquidity/add error:", addData.error || addData);
-      } else {
-        console.log("Add liquidity result:", addData);
-      }
-    } catch (addErr) {
-      console.error("Failed to call /api/liquidity/add:", addErr);
-    }
+    // Removed the internal call to /api/liquidity/add as the transaction hasn't been signed/sent yet.
+    // The client orchestrates: Create Pool -> Sign -> Send -> Wait -> Add Liquidity -> Sign -> Send.
 
     return NextResponse.json(
       {

@@ -14,7 +14,6 @@ const supabaseAdmin = createClient(
     },
   }
 );
-
 export async function POST(req: Request) {
   try {
     // 1. Verify JWT for authentication

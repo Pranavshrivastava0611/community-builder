@@ -1,6 +1,7 @@
 // app/api/liquidity/add/route.ts
 import DLMM from "@meteora-ag/dlmm";
-import { Connection, PublicKey } from "@solana/web3.js";
+import { createAssociatedTokenAccountInstruction, getAssociatedTokenAddress } from "@solana/spl-token";
+import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { createClient } from "@supabase/supabase-js";
 import BN from "bn.js";
 import bs58 from "bs58";
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
     // --- COMMUNITY CHECK ---
     const { data: community, error } = await supabaseAdmin
       .from("communities")
-      .select("creator_id, meteora_lb_pair_address")
+      .select("creator_id, meteora_lb_pair_address, token_mint_address")
       .eq("id", communityId)
       .single();
 
@@ -173,28 +174,158 @@ export async function POST(req: Request) {
     }
 
     const activeId = activeBin.binId;
+    const BIN_SPREAD = 5;
 
-    // Define liquidity distribution strategy
-    const minBinId = activeId - 10; // 10 bins below
-    const maxBinId = activeId + 10; // 10 bins above
+    // 1. Core Token Definitions & Validation
+    const tokenX = dlmmPool.tokenX.publicKey;
+    const tokenY = dlmmPool.tokenY.publicKey;
+    const communityMint = new PublicKey(community.token_mint_address);
 
-    console.log(`💧 Creating position with liquidity distribution: bins ${minBinId} to ${maxBinId}`);
+    // 2. Check for WSOL ATA (Interceptive)
+    const WSOL = new PublicKey("So11111111111111111111111111111111111111112");
+    if (tokenX.equals(WSOL) || tokenY.equals(WSOL)) {
+        const ata = await getAssociatedTokenAddress(WSOL, ownerPubkey);
+        const ataAccount = await solanaConnection.getAccountInfo(ata);
+        
+        if (!ataAccount) {
+            console.log("⚠️ WSOL ATA missing. Returning transaction to create it.");
+            const ix = createAssociatedTokenAccountInstruction(
+                ownerPubkey,
+                ata,
+                ownerPubkey,
+                WSOL
+            );
+            const tx = new Transaction().add(ix);
+            const { blockhash } = await solanaConnection.getLatestBlockhash("finalized");
+            tx.recentBlockhash = blockhash;
+            tx.feePayer = ownerPubkey;
+            
+            const serialized = tx.serialize({
+                requireAllSignatures: false,
+                verifySignatures: false,
+            });
+            
+            return NextResponse.json({
+                action: "CREATE_WSOL_ATA",
+                serializedTransaction: bs58.encode(serialized),
+                message: "WSOL Account missing. Please sign to create it first."
+            });
+        }
+    }
 
-    // Create position with balanced distribution
+    // 3. Define Strategy & Amounts (Universal Fix)
+    let finalXAmount = new BN(0);
+    let finalYAmount = new BN(0);
+
+    // Initial Mapping: purely based on mint identity
+    if (communityMint.equals(tokenX)) {
+        finalXAmount = new BN(tokenXAmount);
+        finalYAmount = new BN(tokenYAmount);
+    } else if (communityMint.equals(tokenY)) {
+        finalXAmount = new BN(tokenYAmount); 
+        finalYAmount = new BN(tokenXAmount);
+    } else {
+        throw new Error("Community token mint does not match pool tokenX or tokenY");
+    }
+    
+    // Select Strategy based on Active Bin & Amounts
+    let strategy;
+
+   if (activeId === 0) {
+  // ✅ BOOTSTRAP CASE: Auto-select the community token (non-SOL) for bootstrap
+  console.log('🚀 Bootstrap mode detected (activeBinId = 0)');
+  
+  if (finalXAmount.isZero() && finalYAmount.isZero()) {
+    throw new Error("Liquidity amount cannot be zero for both tokens");
+  }
+
+  // If both amounts provided, automatically choose the community token
+  if (finalXAmount.gt(new BN(0)) && finalYAmount.gt(new BN(0))) {
+    console.log('⚠️ Both tokens provided at bootstrap. Auto-selecting community token...');
+    
+    // Determine which is the community token and keep only that one
+    const WSOL = new PublicKey("So11111111111111111111111111111111111111112");
+    
+    if (tokenX.equals(communityMint)) {
+      // Community token is X, keep X and zero out Y
+      console.log(`✅ Bootstrapping with Token X (community token): ${finalXAmount.toString()}`);
+      finalYAmount = new BN(0);
+    } else if (tokenY.equals(communityMint)) {
+      // Community token is Y, keep Y and zero out X
+      console.log(`✅ Bootstrapping with Token Y (community token): ${finalYAmount.toString()}`);
+      finalXAmount = new BN(0);
+    } else {
+      // Fallback: if neither is explicitly the community token, prefer non-SOL
+      if (tokenX.equals(WSOL)) {
+        console.log(`✅ Bootstrapping with Token Y (non-SOL): ${finalYAmount.toString()}`);
+        finalXAmount = new BN(0);
+      } else {
+        console.log(`✅ Bootstrapping with Token X (non-SOL): ${finalXAmount.toString()}`);
+        finalYAmount = new BN(0);
+      }
+    }
+  }
+
+  strategy = {
+    strategyType: "SpotOneSide" as any,
+    minBinId: 0,
+    maxBinId: BIN_SPREAD,
+  };
+}
+else {
+        // Standard Logic (Active Bin > 0)
+        if (finalXAmount.gt(new BN(0)) && finalYAmount.isZero()) {
+             // Token X only → ABOVE price
+             strategy = {
+                strategyType: "SpotOneSide" as any,
+                minBinId: activeId + 1,
+                maxBinId: activeId + BIN_SPREAD,
+             };
+        } else if (finalYAmount.gt(new BN(0)) && finalXAmount.isZero()) {
+             // Token Y only → BELOW price
+             strategy = {
+                strategyType: "SpotOneSide" as any,
+                minBinId: Math.max(0, activeId - BIN_SPREAD),
+                maxBinId: activeId - 1,
+             };
+         } else {
+             // Both tokens → Balanced liquidity
+             strategy = {
+                strategyType: "SpotBalanced" as any,
+                minBinId: activeId - BIN_SPREAD,
+                maxBinId: activeId + BIN_SPREAD,
+             };
+         }
+    }
+
+    // 🧪 SAFETY CHECK: Log all strategy parameters before transaction
+    console.log('🔍 Strategy Safety Check:', {
+      activeId,
+      strategy: strategy.strategyType,
+      minBinId: strategy.minBinId,
+      maxBinId: strategy.maxBinId,
+      X: finalXAmount.toString(),
+      Y: finalYAmount.toString(),
+    });
+    console.log(`💧 Creating position with strategy: ${strategy.strategyType} [${strategy.minBinId}, ${strategy.maxBinId}]`);
+    console.log(`   Amounts: X=${finalXAmount.toString()} Y=${finalYAmount.toString()}`);
+
     let createPositionTx;
     try {
+      const positionKeypair = Keypair.generate();
+
       createPositionTx = await dlmmPool.initializePositionAndAddLiquidityByStrategy({
-        positionPubKey: ownerPubkey,
+        positionPubKey: positionKeypair.publicKey,
         user: ownerPubkey,
-        totalXAmount: new BN(tokenXAmount),
-        totalYAmount: new BN(tokenYAmount),
-        strategy: {
-          maxBinId,
-          minBinId,
-          strategyType: "SpotBalanced",
-        },
+        totalXAmount: finalXAmount,
+        totalYAmount: finalYAmount,
+        strategy: strategy, // Passed directly, not nested
         slippage: slippageBps / 10000,
       });
+
+      // IMPORTANT: The new position account Keypair must verify the initialization
+      createPositionTx.partialSign(positionKeypair);
+      
       console.log("✅ Position transaction created");
     } catch (posError: any) {
       console.error("❌ Error creating position:", posError);
@@ -214,7 +345,7 @@ export async function POST(req: Request) {
       requireAllSignatures: false,
       verifySignatures: false,
     });
-
+    
     console.log("✅ Add liquidity transaction prepared successfully");
 
     return NextResponse.json(
@@ -222,12 +353,20 @@ export async function POST(req: Request) {
         serializedTransaction: bs58.encode(serialized),
         message: "Unsigned add liquidity transaction ready. Sign & send on frontend.",
         activeBinId: activeId,
-        minBinId,
-        maxBinId,
+        minBinId: strategy.minBinId,
+        maxBinId: strategy.maxBinId,
       },
       { status: 200 }
     );
   } catch (err: any) {
+    if (String(err).includes("failed to get info about account")) {
+       console.error("RPC Fetch Error in DLMM:", err);
+       return NextResponse.json({
+           error: "RPC node failed to fetch account info. Please try again.",
+           details: String(err)
+       }, { status: 503 });
+    }
+
     console.error("❌ /api/liquidity/add error:", err);
     return NextResponse.json(
       {

@@ -1,38 +1,84 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@700&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap');
 @import "@solana/wallet-adapter-react-ui/styles.css";
 
 @import "tailwindcss";
 
 :root {
-  --color-primary: #3b82f6; /* Blue-500 */
-  --color-secondary: #8b5cf6; /* Violet-500 */
-  --color-accent: #10b981; /* Green-500 */
-  --color-text-light: #f3f4f6; /* Gray-100 */
-  --color-text-dark: #1f2937; /* Gray-800 */
-  --color-bg-light: #ffffff;
-  --color-bg-dark: #0f172a; /* Slate-900 */
+  /* Solana-native Dark Theme Palette */
+  --color-primary: #F97316;
+  /* Orange-500 */
+  --color-secondary: #EAB308;
+  /* Gold-500 */
+  --color-accent: #FFFFFF;
+  /* White */
 
-  /* Classic font stack */
-  --font-heading: 'Playfair Display', serif;
-  --font-body: 'DM Sans', sans-serif;
-}
+  --color-bg-dark: #000000;
+  /* Pure Black */
+  --color-bg-card: rgba(255, 255, 255, 0.03);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-text-light: #e2e8f0; /* Slate-200 */
-    --color-text-dark: #f8fafc; /* Slate-50 */
-    --color-bg-light: #1e293b; /* Slate-800 */
-    --color-bg-dark: #0f172a; /* Slate-900 */
-  }
+  --color-text-main: #FFFFFF;
+  --color-text-muted: #9CA3AF;
+  /* Gray-400 */
+
+  /* Modern font stack */
+  --font-heading: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
 }
 
 body {
   font-family: var(--font-body);
-  color: var(--color-text-dark);
-  background-color: var(--color-bg-light);
+  color: var(--color-text-main);
+  background-color: var(--color-bg-dark);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: var(--font-heading);
 }
-  
+
+/* Custom Utilities for Glow/Grid if needed, though Tailwind classes usually suffice */
+.bg-grid-pattern {
+  background-size: 50px 50px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 1s ease-out forwards;
+}
+
+.delay-100 {
+  animation-delay: 100ms;
+}
