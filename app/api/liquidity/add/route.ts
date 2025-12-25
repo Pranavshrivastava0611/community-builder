@@ -262,21 +262,40 @@ export async function POST(req: Request) {
             activeBinId: activeId,
          });
 
-         // 3. Select Strategy based on Non-Zero Amount (Canonical Rule)
+         // 3. Dynamic Spread Calculation (Avoids Min Liquidity Errors)
+         // DLMM requires a minimum amount per bin. If total amount is small,
+         // we must reduce the number of bins to ensure each bin gets enough.
+         const activeAmount = finalXAmount.gt(new BN(0)) ? finalXAmount : finalYAmount;
+         const MIN_PER_BIN = new BN(1000); // Safe minimum raw units per bin
+         
+         // Calculate max possible bins
+         let maxBins = activeAmount.div(MIN_PER_BIN).toNumber();
+         
+         // Clamp spread: At least 1 bin, at most BIN_SPREAD (5)
+         let effectiveSpread = Math.min(BIN_SPREAD, Math.max(1, maxBins));
+         
+         console.log(`📊 Dynamic Spread Config:`, {
+             totalAmount: activeAmount.toString(),
+             minPerBin: MIN_PER_BIN.toString(),
+             maxPossibleBins: maxBins,
+             effectiveSpread: effectiveSpread
+         });
+
+         // 4. Select Strategy based on Non-Zero Amount (Canonical Rule)
          // X -> ABOVE
          // Y -> BELOW
          if (finalXAmount.gt(new BN(0))) {
-             console.log(`-> Strategy: Sell X (Above). Range: [${activeId + 1}, ${activeId + BIN_SPREAD}]`);
+             console.log(`-> Strategy: Sell X (Above). Range: [${activeId + 1}, ${activeId + effectiveSpread}]`);
              strategy = {
                 strategyType: "SpotOneSide" as any,
                 minBinId: activeId + 1,
-                maxBinId: activeId + BIN_SPREAD,
+                maxBinId: activeId + effectiveSpread,
              };
          } else if (finalYAmount.gt(new BN(0))) {
-             console.log(`-> Strategy: Sell Y (Below). Range: [${activeId - BIN_SPREAD}, ${activeId - 1}]`);
+             console.log(`-> Strategy: Sell Y (Below). Range: [${activeId - effectiveSpread}, ${activeId - 1}]`);
              strategy = {
                 strategyType: "SpotOneSide" as any,
-                minBinId: activeId - BIN_SPREAD,
+                minBinId: activeId - effectiveSpread,
                 maxBinId: activeId - 1,
              };
          } else {
