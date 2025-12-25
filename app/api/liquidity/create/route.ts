@@ -2,6 +2,7 @@
 import DLMM from "@meteora-ag/dlmm";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { createClient } from "@supabase/supabase-js";
+// @ts-ignore
 import BN from "bn.js";
 import bs58 from "bs58";
 import jwt from "jsonwebtoken";
@@ -101,25 +102,17 @@ export async function POST(req: Request) {
     }
 
     // ------------------------
-    // Create new LB pair transaction
+    // Create new LB pair WITH initial liquidity
     // ------------------------
-    console.log("Building unsigned transaction for new Meteora DLMM pool...");
+    console.log("Building transaction for new Meteora DLMM pool WITH initial liquidity...");
 
     const tokenXMint = new PublicKey(tokenMintAddress);
     const tokenYMint = WSOL_MINT_ADDRESS;
     const ownerPubkey = new PublicKey(userPublicKey);
 
-    // First, we need to get or create a preset parameter account
-    // Preset parameters define the fee structure and other pool settings
-    // For devnet, you can use a default preset or create one
-    
-    // Get preset parameter PDA (this is typically derived from bin step and base factor)
-    // baseFactor is used for price calculation: price = (1 + baseFactor/10000)^binId
+    // Get preset parameter PDA
     const baseFactor = new BN(10000); // Standard base factor
     
-    // Derive preset parameter address
-    // You may need to create this first or use an existing one
-    // For now, we'll try to find or create a standard preset
     const [presetParameter] = PublicKey.findProgramAddressSync(
       [
         Buffer.from("preset_parameter"),
@@ -135,56 +128,63 @@ export async function POST(req: Request) {
         throw new Error(`Preset parameter account ${presetParameter.toBase58()} not found for bin step ${binStep}. Please try a standard bin step (e.g. 100).`);
     }
 
-    // Calculate active bin ID from initial price
-    // activeId determines the starting price bin
-    // Formula: activeId = log(price) / log(1 + binStep/10000)
-    
-    // CRITICAL: Sort mints.
-    // DLMM requires TokenX < TokenY.
-    // Use Buffer comparison for deterministic sorting.
+    // CRITICAL: Sort mints (DLMM requires TokenX < TokenY)
     let mintX = tokenXMint;
     let mintY = tokenYMint;
     let price = initialPrice;
+    let initialXAmount = new BN(tokenAmount * Math.pow(10, tokenDecimals));
+    let initialYAmount = new BN(solAmount * Math.pow(10, 9)); // SOL has 9 decimals
+
+    let decimalsX = tokenDecimals;
+    let decimalsY = 9; // SOL has 9 decimals
 
     if (Buffer.compare(tokenXMint.toBuffer(), tokenYMint.toBuffer()) > 0) {
         mintX = tokenYMint; // SOL becomes X
         mintY = tokenXMint; // Token becomes Y
-        // If X=SOL and Y=Token, price (Y/X) is Token/SOL.
-        // User inputs Price = SOL/Token.
-        // So we must invert.
         price = 1.0 / initialPrice;
+        
+        // Swap amounts
+        const temp = initialXAmount;
+        initialXAmount = initialYAmount;
+        initialYAmount = temp;
+
+        // Swap decimals tracking
+        decimalsX = 9;
+        decimalsY = tokenDecimals;
     }
+
+    console.log(`Sorted mints: X=${mintX.toBase58()} (Dec: ${decimalsX}), Y=${mintY.toBase58()} (Dec: ${decimalsY})`);
+    
+    // Adjust price to represent Raw Ratio (RawY / RawX)
+    // Current price is UI Ratio (UI_Y / UI_X)
+    // Raw Ratio = UI Ratio * (10^DecY / 10^DecX)
+    price = price * Math.pow(10, decimalsY - decimalsX);
+    
+    console.log(`Initial liquidity: X=${initialXAmount.toString()}, Y=${initialYAmount.toString()}`);
+    console.log(`Initial Raw Price: ${price} (adjusted for decimals)`);
 
     const pricePerBin = 1 + binStep / 10000;
     const activeId = new BN(Math.floor(Math.log(price) / Math.log(pricePerBin)));
 
-    // Create the LB pair using the correct signature and SORTED mints
+    console.log(`Calculated activeId: ${activeId.toString()}`);
+
+    // Step 1: Create the LB pair
     const createTx = await DLMM.createLbPair(
       solanaConnection,
-      ownerPubkey, // funder
-      mintX, // tokenX (sorted)
-      mintY, // tokenY (sorted)
-      new BN(binStep), // binStep
-      baseFactor, // baseFactor
-      presetParameter, // presetParameter PDA
-      activeId, // activeId (starting bin)
+      ownerPubkey,
+      mintX,
+      mintY,
+      new BN(binStep),
+      baseFactor,
+      presetParameter,
+      activeId,
       {
         cluster: "devnet",
       }
     );
 
-    // Extract transaction and LB pair address
-    // createLbPair returns just a Transaction
-    const tx = createTx;
-
-    if (!tx) {
-      console.error("Unexpected createLbPair response");
-      throw new Error("Failed to create LB pair transaction");
-    }
-
-    // Extract valid LB Pair Address directly from the transaction instructions
-    // This avoids manual PDA derivation errors and ensures we track the true account
-    const createIx = tx.instructions.find(ix => 
+    // Extract LB Pair Address from transaction
+    const createIx = createTx.instructions.find(ix => 
       ix.programId.equals(METEORA_DLMM_PROGRAM_ID)
     );
 
@@ -192,36 +192,46 @@ export async function POST(req: Request) {
       throw new Error("No Meteora DLMM instruction found in the generated transaction.");
     }
     if (!createIx.keys[0].isWritable) {
-  throw new Error("LB Pair account not writable — instruction layout changed");
-}
+      throw new Error("LB Pair account not writable — instruction layout changed");
+    }
 
-    // The LB Pair account is the first account in the InitializeLbPair instruction
     const lbPairAddress = createIx.keys[0].pubkey;
-    console.log("✅ Extracted LB Pair Address from transaction:", lbPairAddress.toBase58());
+    console.log("✅ Extracted LB Pair Address:", lbPairAddress.toBase58());
 
-    // Add recent blockhash and fee payer
+    // Prepare transaction for sending
     const { blockhash } = await solanaConnection.getLatestBlockhash("finalized");
-    tx.recentBlockhash = blockhash;
-    tx.feePayer = ownerPubkey;
+    createTx.recentBlockhash = blockhash;
+    createTx.feePayer = ownerPubkey;
 
-    // Serialize unsigned transaction
-    const serialized = tx.serialize({
+    // Serialize the pool creation transaction
+    const serializedCreateTx = createTx.serialize({
       requireAllSignatures: false,
       verifySignatures: false,
     });
 
-    // NOTE: We do NOT save the address to DB here anymore.
-    // The client must sign, send, confirm, VERIFY the account exists, and then call /api/community/update-pool
-
-
-    // Removed the internal call to /api/liquidity/add as the transaction hasn't been signed/sent yet.
-    // The client orchestrates: Create Pool -> Sign -> Send -> Wait -> Add Liquidity -> Sign -> Send.
-
+    // Return pool creation transaction and parameters for liquidity addition
+    // The frontend will:
+    // 1. Send and confirm the pool creation transaction
+    // 2. Call /api/liquidity/add with these parameters to add initial liquidity
     return NextResponse.json(
       {
-        serializedTransaction: bs58.encode(serialized),
+        createPoolTransaction: bs58.encode(serializedCreateTx),
         lbPairAddress: lbPairAddress.toBase58(),
-        message: "Unsigned pool creation transaction ready. Sign & send on frontend.",
+        liquidityParams: {
+          tokenXAmount: initialXAmount.toString(),
+          tokenYAmount: initialYAmount.toString(),
+          activeId: activeId.toNumber(),
+          tokenDecimals,
+          mintX: mintX.toBase58(),
+          mintY: mintY.toBase58(),
+        },
+        message: "Pool creation transaction ready. After confirmation, add initial liquidity via /api/liquidity/add",
+        instructions: [
+          "1. Sign and send createPoolTransaction",
+          "2. Wait for confirmation (finalized)",
+          "3. Call /api/liquidity/add with lbPairAddress and liquidityParams",
+          "4. Pool will be ready with initial liquidity"
+        ]
       },
       { status: 200 }
     );

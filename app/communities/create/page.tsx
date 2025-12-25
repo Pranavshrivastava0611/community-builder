@@ -4,7 +4,7 @@ import GlassPanel from '@/components/GlassPanel';
 import GlowButton from '@/components/GlowButton';
 import Navbar from '@/components/Navbar';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { clusterApiUrl, Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { clusterApiUrl, Connection, Transaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -66,7 +66,7 @@ export default function CreateCommunityPage() {
   ) {
     try {
       setLoading(true);
-      setSuccess('Creating liquidity pool...');
+      setSuccess('Creating liquidity pool WITH initial liquidity...');
 
       const response = await fetch('/api/liquidity/create', {
         method: 'POST',
@@ -96,78 +96,58 @@ export default function CreateCommunityPage() {
 
       console.log('API Response:', data);
 
-      const serializedTransaction = data.serializedTransaction;
+      const createPoolTx = data.createPoolTransaction;
       const lbPairAddress = data.lbPairAddress;
+      const liquidityParams = data.liquidityParams;
 
-      // Decode the transaction
-      const transaction = Transaction.from(bs58.decode(serializedTransaction));
-
-      // Get a fresh blockhash
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-      transaction.recentBlockhash = blockhash;
-      transaction.lastValidBlockHeight = lastValidBlockHeight;
-
-      if (!publicKey) throw new Error("Wallet not connected");
-      if (!transaction.feePayer || !transaction.feePayer.equals(publicKey)) {
-        transaction.feePayer = publicKey;
+      if (!createPoolTx || !lbPairAddress) {
+        throw new Error('Missing transaction data from API');
       }
 
-      console.log('Sending transaction...');
-      const signature = await sendTransaction(transaction, connection, {
+      // ============================================
+      // STEP 1: Create Pool Transaction
+      // ============================================
+      setSuccess('Step 1/2: Creating pool... Please approve in wallet');
+
+      const poolTx = Transaction.from(bs58.decode(createPoolTx));
+      const { blockhash: poolBlockhash, lastValidBlockHeight: poolLastValid } = await connection.getLatestBlockhash('finalized');
+      poolTx.recentBlockhash = poolBlockhash;
+      poolTx.lastValidBlockHeight = poolLastValid;
+
+      if (!publicKey) throw new Error("Wallet not connected");
+      if (!poolTx.feePayer || !poolTx.feePayer.equals(publicKey)) {
+        poolTx.feePayer = publicKey;
+      }
+
+      console.log('Sending pool creation transaction...');
+      const poolSig = await sendTransaction(poolTx, connection, {
         skipPreflight: false,
         preflightCommitment: 'confirmed',
         maxRetries: 3,
       });
 
-      console.log('Transaction sent! Signature:', signature);
-      setSuccess(`Transaction sent: ${signature}\nWaiting for confirmation...`);
+      console.log('Pool creation transaction sent! Signature:', poolSig);
+      setSuccess(`Step 1/2: Pool creation sent: ${poolSig.slice(0, 8)}...\\nWaiting for confirmation...`);
 
-      const confirmation = await connection.confirmTransaction({
-        signature,
-        blockhash: transaction.recentBlockhash,
-        lastValidBlockHeight: transaction.lastValidBlockHeight!,
-      }, 'confirmed');
+      const poolConfirmation = await connection.confirmTransaction({
+        signature: poolSig,
+        blockhash: poolBlockhash,
+        lastValidBlockHeight: poolLastValid!,
+      }, 'finalized'); // Use 'finalized' to ensure pool is fully committed
 
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+      if (poolConfirmation.value.err) {
+        throw new Error(`Pool creation failed: ${JSON.stringify(poolConfirmation.value.err)}`);
       }
 
-      console.log('Transaction confirmed!');
+      console.log('Pool creation confirmed!');
+      setSuccess(`Step 1/2: Pool created! ✅\\nAddress: ${lbPairAddress}\\nWaiting for pool to propagate...`);
 
       // ============================================
-      // RPC VERIFICATION: Verify LB Pair on-chain
+      // STEP 1.5: UPDATE DB: Save pool address
       // ============================================
-      setSuccess(`Verifying pool initialization on Solana...`);
-      let poolExists = false;
-      let retries = 0;
-      const maxRetries = 30; // Wait up to ~60 seconds
-      const lbPairPubkey = new PublicKey(lbPairAddress);
-
-      while (!poolExists && retries < maxRetries) {
-        try {
-          const accountInfo = await connection.getAccountInfo(lbPairPubkey, 'confirmed');
-          if (accountInfo) {
-            poolExists = true;
-            console.log(`✅ LB Pair account verified on-chain: ${lbPairAddress}`);
-            break;
-          }
-        } catch (e) {
-          console.warn("Error checking account info:", e);
-        }
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        retries++;
-        if (retries % 5 === 0) setSuccess(`Still verifying pool... (${retries}/${maxRetries})`);
-      }
-
-      if (!poolExists) {
-        throw new Error(`Pool account ${lbPairAddress} failed to initialize on-chain after transaction confirmation. Solana may be congested.`);
-      }
-
-      // ============================================
-      // UPDATE DB: Save verified address
-      // ============================================
-      console.log('Updating community record...');
-      await fetch('/api/community/update-pool', {
+      // We MUST save the pool address before adding liquidity because /api/liquidity/add checks it
+      console.log('Updating community record with new pool address...');
+      const updateRes = await fetch('/api/community/update-pool', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -179,40 +159,45 @@ export default function CreateCommunityPage() {
         })
       });
 
-      setSuccess(`Liquidity pool created and verified!\nPool Address: ${lbPairAddress}`);
-
-      // ============================================
-      // Add Initial Liquidity
-      // ============================================
-      console.log('Adding initial liquidity to pool...');
-      const initialSolAmount = 0.1;
-      const initialTokenAmount = 1000;
-
-      const tokenAmountBaseUnits = (initialTokenAmount * Math.pow(10, tokenDecimals)).toString();
-      const solAmountBaseUnits = (initialSolAmount * Math.pow(10, 9)).toString();
-
-      try {
-        const addLiquiditySignature = await handleAddLiquidity(
-          communityId,
-          lbPairAddress,
-          tokenAmountBaseUnits,
-          solAmountBaseUnits,
-          publicKey.toBase58(),
-          100,
-        );
-        setSuccess(`✅ Liquidity added! Signature: ${addLiquiditySignature.slice(0, 8)}...`);
-      } catch (liquidityErr: any) {
-        console.warn("Auto-liquidity addition failed:", liquidityErr);
-        setSuccess(`⚠️ Community & Pool created, but automatic liquidity addition failed due to network congestion.\n\nPlease add liquidity manually from the community page.`);
-        // We gracefully continue to redirect so the user isn't stuck
+      if (!updateRes.ok) {
+        console.warn("Failed to update pool address in DB, but continuing...");
+        // We continue because the user can manually add liquidity later if needed
+        // But the immediate next step might fail if backend enforces the check strictly
       }
+
+      // ============================================
+      // STEP 2: Add Initial Liquidity via API
+      // ============================================
+      // Wait for pool to be fully propagated on-chain
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      setSuccess('Step 2/2: Adding initial liquidity...');
+
+      console.log('Calling /api/liquidity/add with params:', {
+        lbPairAddress,
+        tokenXAmount: liquidityParams.tokenXAmount,
+        tokenYAmount: liquidityParams.tokenYAmount,
+      });
+
+      // Call the add liquidity endpoint
+      const liqSig = await handleAddLiquidity(
+        communityId,
+        lbPairAddress,
+        liquidityParams.tokenXAmount,
+        liquidityParams.tokenYAmount,
+        userPublicKey,
+        100 // 1% slippage
+      );
+
+      console.log('Initial liquidity added! Signature:', liqSig);
+
+      setSuccess(`✅ Pool created and bootstrapped successfully!\\nPool Address: ${lbPairAddress}\\nPool is ready for trading!`);
 
       // ============================================
       // SUCCESS! Redirect
       // ============================================
       console.log(`🎉 Community created successfully! Redirecting...`);
-      // Update success message one last time before redirect if it wasn't the warning above
-      setSuccess((prev) => prev?.includes('⚠️') ? prev : `🎉 Community created successfully! Redirecting...`);
+      setSuccess(`🎉 Community created successfully! Redirecting...`);
 
       setTimeout(() => router.push('/communities'), 4000);
 
@@ -225,6 +210,7 @@ export default function CreateCommunityPage() {
       let errorMessage = error.message || 'Unknown error';
       if (errorMessage.includes('Blockhash not found')) errorMessage = 'Transaction expired. Please try again.';
       else if (errorMessage.includes('insufficient funds')) errorMessage = 'Insufficient SOL in wallet.';
+      else if (errorMessage.includes('User rejected')) errorMessage = 'Transaction rejected by user.';
 
       setError(`Failed to create liquidity pool: ${errorMessage}`);
       throw error;
@@ -615,7 +601,10 @@ export default function CreateCommunityPage() {
       const initialTokenAmount = 1000; // 1000 of your new community token
       const binStep = 100; // Example bin step
       const feeTier = 0.0005; // Example fee tier (0.05%)
-      const initialPrice = 1.0; // Example initial price (Token / SOL ratio)
+
+      // Calculate initial price based on the ratio of amounts
+      // Price = TokenY (SOL) / TokenX (Community Token)
+      const initialPrice = initialSolAmount / initialTokenAmount;
       const userPublicKey = publicKey.toBase58();
 
       console.log(`Adding initial liquidity (${initialSolAmount} SOL, ${initialTokenAmount} ${tokenSymbol}) to the pool...`);

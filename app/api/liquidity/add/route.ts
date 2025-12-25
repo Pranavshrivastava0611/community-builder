@@ -3,6 +3,7 @@ import DLMM from "@meteora-ag/dlmm";
 import { createAssociatedTokenAccountInstruction, getAssociatedTokenAddress } from "@solana/spl-token";
 import { Connection, Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { createClient } from "@supabase/supabase-js";
+//@ts-ignore
 import BN from "bn.js";
 import bs58 from "bs58";
 import jwt from "jsonwebtoken";
@@ -213,90 +214,75 @@ export async function POST(req: Request) {
         }
     }
 
-    // 3. Define Strategy & Amounts (Universal Fix)
-    let finalXAmount = new BN(0);
-    let finalYAmount = new BN(0);
+    // 3. Define Strategy & Amounts
+    // The frontend passes explicit amounts for X and Y (already sorted)
+    let finalXAmount = new BN(tokenXAmount);
+    let finalYAmount = new BN(tokenYAmount);
 
-    // Initial Mapping: purely based on mint identity
-    if (communityMint.equals(tokenX)) {
-        finalXAmount = new BN(tokenXAmount);
-        finalYAmount = new BN(tokenYAmount);
-    } else if (communityMint.equals(tokenY)) {
-        finalXAmount = new BN(tokenYAmount); 
-        finalYAmount = new BN(tokenXAmount);
-    } else {
-        throw new Error("Community token mint does not match pool tokenX or tokenY");
-    }
+    console.log(`✅ Using provided amounts: X=${finalXAmount.toString()}, Y=${finalYAmount.toString()}`);
     
     // Select Strategy based on Active Bin & Amounts
     let strategy;
 
-   if (activeId === 0) {
-  // ✅ BOOTSTRAP CASE: Auto-select the community token (non-SOL) for bootstrap
-  console.log('🚀 Bootstrap mode detected (activeBinId = 0)');
-  
-  if (finalXAmount.isZero() && finalYAmount.isZero()) {
-    throw new Error("Liquidity amount cannot be zero for both tokens");
-  }
+    // Unified Strategy Logic (Handles activeId=0 correctly for Price=1.0)
+    console.log(`📊 Selecting strategy for Active Bin: ${activeId} with spread ${BIN_SPREAD}`);
 
-  // If both amounts provided, automatically choose the community token
-  if (finalXAmount.gt(new BN(0)) && finalYAmount.gt(new BN(0))) {
-    console.log('⚠️ Both tokens provided at bootstrap. Auto-selecting community token...');
-    
-    // Determine which is the community token and keep only that one
-    const WSOL = new PublicKey("So11111111111111111111111111111111111111112");
-    
-    if (tokenX.equals(communityMint)) {
-      // Community token is X, keep X and zero out Y
-      console.log(`✅ Bootstrapping with Token X (community token): ${finalXAmount.toString()}`);
-      finalYAmount = new BN(0);
-    } else if (tokenY.equals(communityMint)) {
-      // Community token is Y, keep Y and zero out X
-      console.log(`✅ Bootstrapping with Token Y (community token): ${finalYAmount.toString()}`);
-      finalXAmount = new BN(0);
-    } else {
-      // Fallback: if neither is explicitly the community token, prefer non-SOL
-      if (tokenX.equals(WSOL)) {
-        console.log(`✅ Bootstrapping with Token Y (non-SOL): ${finalYAmount.toString()}`);
-        finalXAmount = new BN(0);
-      } else {
-        console.log(`✅ Bootstrapping with Token X (non-SOL): ${finalXAmount.toString()}`);
-        finalYAmount = new BN(0);
-      }
-    }
-  }
+    if (finalXAmount.gt(new BN(0)) && finalYAmount.isZero()) {
+         // Token X only → ABOVE price
+         strategy = {
+            strategyType: "SpotOneSide" as any,
+            minBinId: activeId + 1,
+            maxBinId: activeId + BIN_SPREAD,
+         };
+    } else if (finalYAmount.gt(new BN(0)) && finalXAmount.isZero()) {
+         // Token Y only → BELOW price
+         strategy = {
+            strategyType: "SpotOneSide" as any,
+            minBinId: activeId - BIN_SPREAD,
+            maxBinId: activeId - 1,
+         };
+     } else {
+         // Both tokens provided -> Force SpotOneSide (Community Token Only)
+         console.log("⚠️ Forcing SpotOneSide strategy (Using Community Token only)");
+         
+         // 1. Zero out the non-community token
+         if (communityMint.equals(tokenX)) {
+             finalYAmount = new BN(0);
+             console.log("-> Community is Token X. Zeroing Y.");
+         } else {
+             finalXAmount = new BN(0);
+             console.log("-> Community is Token Y. Zeroing X.");
+         }
 
-  strategy = {
-    strategyType: "SpotOneSide" as any,
-    minBinId: 0,
-    maxBinId: BIN_SPREAD,
-  };
-}
-else {
-        // Standard Logic (Active Bin > 0)
-        if (finalXAmount.gt(new BN(0)) && finalYAmount.isZero()) {
-             // Token X only → ABOVE price
+         // 2. Log Mints for debugging
+         console.log("🔍 Token Diagnostics:", {
+            tokenX: dlmmPool.tokenX.publicKey.toBase58(),
+            tokenY: dlmmPool.tokenY.publicKey.toBase58(),
+            communityMint: communityMint.toBase58(),
+            activeBinId: activeId,
+         });
+
+         // 3. Select Strategy based on Non-Zero Amount (Canonical Rule)
+         // X -> ABOVE
+         // Y -> BELOW
+         if (finalXAmount.gt(new BN(0))) {
+             console.log(`-> Strategy: Sell X (Above). Range: [${activeId + 1}, ${activeId + BIN_SPREAD}]`);
              strategy = {
                 strategyType: "SpotOneSide" as any,
                 minBinId: activeId + 1,
                 maxBinId: activeId + BIN_SPREAD,
              };
-        } else if (finalYAmount.gt(new BN(0)) && finalXAmount.isZero()) {
-             // Token Y only → BELOW price
+         } else if (finalYAmount.gt(new BN(0))) {
+             console.log(`-> Strategy: Sell Y (Below). Range: [${activeId - BIN_SPREAD}, ${activeId - 1}]`);
              strategy = {
                 strategyType: "SpotOneSide" as any,
-                minBinId: Math.max(0, activeId - BIN_SPREAD),
+                minBinId: activeId - BIN_SPREAD,
                 maxBinId: activeId - 1,
              };
          } else {
-             // Both tokens → Balanced liquidity
-             strategy = {
-                strategyType: "SpotBalanced" as any,
-                minBinId: activeId - BIN_SPREAD,
-                maxBinId: activeId + BIN_SPREAD,
-             };
+             throw new Error("Both amounts are zero?! Should not happen.");
          }
-    }
+     }
 
     // 🧪 SAFETY CHECK: Log all strategy parameters before transaction
     console.log('🔍 Strategy Safety Check:', {
