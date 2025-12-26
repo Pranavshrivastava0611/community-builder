@@ -30,7 +30,39 @@ const solanaConnection = new Connection(
 const WSOL_MINT_ADDRESS = new PublicKey("So11111111111111111111111111111111111111112");
 
 // Devnet DLMM Program ID
-const METEORA_DLMM_PROGRAM_ID = new PublicKey( "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo");
+const METEORA_DLMM_PROGRAM_ID = new PublicKey("LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo");
+
+// Helper: Retry logic for account detection
+async function waitForAccount(
+  pubkey: PublicKey,
+  maxRetries: number = 40,
+  baseDelayMs: number = 1000
+): Promise<boolean> {
+  let retries = 0;
+  console.log(`⏳ Waiting for account ${pubkey.toBase58()}...`);
+
+  while (retries < maxRetries) {
+    try {
+      const acc = await solanaConnection.getAccountInfo(pubkey, 'confirmed');
+      if (acc && acc.data.length > 0) {
+        console.log(`✅ Account found after ${retries} attempts`);
+        return true;
+      }
+    } catch (error: any) {
+      console.log(`Retry ${retries + 1}/${maxRetries}: ${error.message}`);
+    }
+
+    const delayMs = retries < 10 ? baseDelayMs : retries < 20 ? baseDelayMs * 2 : baseDelayMs * 3;
+    await new Promise(res => setTimeout(res, delayMs));
+    retries++;
+
+    if (retries % 5 === 0) {
+      console.log(`⏳ Still waiting... (${retries}/${maxRetries} attempts)`);
+    }
+  }
+
+  return false;
+}
 
 // ------------------------
 // API Route
@@ -68,8 +100,19 @@ export async function POST(req: Request) {
       tokenDecimals,
       binStep = 100,
       initialPrice = 1.0,
-      userPublicKey, // frontend-admin wallet pubkey (string)
+      userPublicKey,
     } = body;
+
+    console.log("📋 Create Pool Parameters:", {
+      communityId,
+      tokenMintAddress,
+      solAmount,
+      tokenAmount,
+      tokenDecimals,
+      binStep,
+      initialPrice,
+      userPublicKey,
+    });
 
     if (
       !communityId ||
@@ -101,10 +144,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Token mint mismatch for community" }, { status: 400 });
     }
 
-    // ------------------------
-    // Create new LB pair WITH initial liquidity
-    // ------------------------
-    console.log("Building transaction for new Meteora DLMM pool WITH initial liquidity...");
+    // --- VALIDATE AMOUNTS ---
+    if (solAmount <= 0 || tokenAmount <= 0) {
+      return NextResponse.json({ error: "Amounts must be positive" }, { status: 400 });
+    }
+
+    if (tokenDecimals < 0 || tokenDecimals > 18) {
+      return NextResponse.json({ error: "Invalid token decimals" }, { status: 400 });
+    }
+
+    // --- CREATE NEW LB PAIR ---
+    console.log("🔄 Building transaction for new Meteora DLMM pool...");
 
     const tokenXMint = new PublicKey(tokenMintAddress);
     const tokenYMint = WSOL_MINT_ADDRESS;
@@ -123,12 +173,17 @@ export async function POST(req: Request) {
     );
 
     // Verify preset parameter exists
+    console.log(`🔍 Checking preset parameter: ${presetParameter.toBase58()}`);
     const presetParamAccount = await solanaConnection.getAccountInfo(presetParameter);
     if (!presetParamAccount) {
-        throw new Error(`Preset parameter account ${presetParameter.toBase58()} not found for bin step ${binStep}. Please try a standard bin step (e.g. 100).`);
+        throw new Error(
+          `Preset parameter account ${presetParameter.toBase58()} not found for bin step ${binStep}. ` +
+          `Please use a standard bin step (e.g., 1, 10, 25, 100).`
+        );
     }
+    console.log("✅ Preset parameter found");
 
-    // CRITICAL: Sort mints (DLMM requires TokenX < TokenY)
+    // --- SORT MINTS (DLMM requires TokenX < TokenY) ---
     let mintX = tokenXMint;
     let mintY = tokenYMint;
     let price = initialPrice;
@@ -138,7 +193,9 @@ export async function POST(req: Request) {
     let decimalsX = tokenDecimals;
     let decimalsY = 9; // SOL has 9 decimals
 
-    if (Buffer.compare(tokenXMint.toBuffer(), tokenYMint.toBuffer()) > 0) {
+    const comparison = Buffer.compare(tokenXMint.toBuffer(), tokenYMint.toBuffer());
+    if (comparison > 0) {
+        // Token > SOL, so swap
         mintX = tokenYMint; // SOL becomes X
         mintY = tokenXMint; // Token becomes Y
         price = 1.0 / initialPrice;
@@ -148,27 +205,43 @@ export async function POST(req: Request) {
         initialXAmount = initialYAmount;
         initialYAmount = temp;
 
-        // Swap decimals tracking
+        // Swap decimals
         decimalsX = 9;
         decimalsY = tokenDecimals;
+
+        console.log("⚠️ Mints were out of order, swapped: SOL will be tokenX");
     }
 
-    console.log(`Sorted mints: X=${mintX.toBase58()} (Dec: ${decimalsX}), Y=${mintY.toBase58()} (Dec: ${decimalsY})`);
+    console.log(`✅ Sorted mints:`);
+    console.log(`   X: ${mintX.toBase58()} (Decimals: ${decimalsX})`);
+    console.log(`   Y: ${mintY.toBase58()} (Decimals: ${decimalsY})`);
     
-    // Adjust price to represent Raw Ratio (RawY / RawX)
-    // Current price is UI Ratio (UI_Y / UI_X)
-    // Raw Ratio = UI Ratio * (10^DecY / 10^DecX)
-    price = price * Math.pow(10, decimalsY - decimalsX);
+    // --- ADJUST PRICE FOR DECIMALS ---
+    // UI Price (as provided) = UI_Y / UI_X
+    // Raw Price (for bin calculation) = RawY / RawX = UI_Y / UI_X * (10^DecY / 10^DecX)
+    const decimalAdjustment = Math.pow(10, decimalsY - decimalsX);
+    const rawPrice = price * decimalAdjustment;
     
-    console.log(`Initial liquidity: X=${initialXAmount.toString()}, Y=${initialYAmount.toString()}`);
-    console.log(`Initial Raw Price: ${price} (adjusted for decimals)`);
+    console.log(`📊 Price Calculation:`);
+    console.log(`   Initial UI Price: ${price}`);
+    console.log(`   Decimal Adjustment: 10^(${decimalsY} - ${decimalsX}) = ${decimalAdjustment}`);
+    console.log(`   Raw Price (for bins): ${rawPrice}`);
+    
+    console.log(`💰 Initial Liquidity:`);
+    console.log(`   X: ${initialXAmount.toString()} (raw units)`);
+    console.log(`   Y: ${initialYAmount.toString()} (raw units)`);
 
+    // --- CALCULATE ACTIVE BIN ---
     const pricePerBin = 1 + binStep / 10000;
-    const activeId = new BN(Math.floor(Math.log(price) / Math.log(pricePerBin)));
+    const activeId = new BN(Math.floor(Math.log(rawPrice) / Math.log(pricePerBin)));
 
-    console.log(`Calculated activeId: ${activeId.toString()}`);
+    console.log(`📈 Bin Calculation:`);
+    console.log(`   Bin Step: ${binStep} (price increase per bin: ${(pricePerBin - 1) * 100}%)`);
+    console.log(`   Price Per Bin: ${pricePerBin}`);
+    console.log(`   Calculated Active Bin ID: ${activeId.toString()}`);
 
-    // Step 1: Create the LB pair
+    // --- CREATE LB PAIR TRANSACTION ---
+    console.log("🔨 Creating LB pair transaction...");
     const createTx = await DLMM.createLbPair(
       solanaConnection,
       ownerPubkey,
@@ -191,8 +264,11 @@ export async function POST(req: Request) {
     if (!createIx) {
       throw new Error("No Meteora DLMM instruction found in the generated transaction.");
     }
+    if (!createIx.keys || createIx.keys.length === 0) {
+      throw new Error("No keys found in Meteora DLMM instruction.");
+    }
     if (!createIx.keys[0].isWritable) {
-      throw new Error("LB Pair account not writable — instruction layout changed");
+      throw new Error("LB Pair account not writable — instruction layout may have changed.");
     }
 
     const lbPairAddress = createIx.keys[0].pubkey;
@@ -209,10 +285,9 @@ export async function POST(req: Request) {
       verifySignatures: false,
     });
 
+    console.log("✅ Pool creation transaction serialized successfully");
+
     // Return pool creation transaction and parameters for liquidity addition
-    // The frontend will:
-    // 1. Send and confirm the pool creation transaction
-    // 2. Call /api/liquidity/add with these parameters to add initial liquidity
     return NextResponse.json(
       {
         createPoolTransaction: bs58.encode(serializedCreateTx),
@@ -229,14 +304,14 @@ export async function POST(req: Request) {
         instructions: [
           "1. Sign and send createPoolTransaction",
           "2. Wait for confirmation (finalized)",
-          "3. Call /api/liquidity/add with lbPairAddress and liquidityParams",
+          "3. Call /api/liquidity/add with lbPairAddress and the tokenXAmount/tokenYAmount from liquidityParams",
           "4. Pool will be ready with initial liquidity"
         ]
       },
       { status: 200 }
     );
   } catch (err: any) {
-    console.error("/api/liquidity/create error:", err);
+    console.error("❌ /api/liquidity/create error:", err);
     return NextResponse.json(
       { 
         error: err?.message || String(err),

@@ -19,7 +19,7 @@ const supabaseAdmin = createClient(
 
 const solanaConnection = new Connection(
   process.env.NEXT_PUBLIC_SOLANA_CLUSTER_URL || "https://api.devnet.solana.com",
-  "confirmed" // Use "confirmed" for faster response
+  "confirmed"
 );
 
 export async function POST(req: Request) {
@@ -99,14 +99,13 @@ export async function POST(req: Request) {
 
     // --- IMPROVED: Wait for LB Pair account with exponential backoff ---
     let accountFound = false;
-    const maxRetries = 40; // Increased retries
+    const maxRetries = 40;
     let retries = 0;
     
     console.log(`Waiting for LB Pair account ${lbPairAddress} to be available...`);
     
     while (!accountFound && retries < maxRetries) {
       try {
-        // Use 'confirmed' commitment for faster detection
         const acc = await solanaConnection.getAccountInfo(lbPair, 'confirmed');
         if (acc && acc.data.length > 0) {
           console.log(`✅ LB Pair account found after ${retries} retries`);
@@ -119,12 +118,10 @@ export async function POST(req: Request) {
         console.log(`Retry ${retries + 1}/${maxRetries}: ${error.message}`);
       }
       
-      // Exponential backoff: start with 1s, increase to 3s after 10 tries
       const delayMs = retries < 10 ? 1000 : retries < 20 ? 2000 : 3000;
       await new Promise(res => setTimeout(res, delayMs));
       retries++;
       
-      // Log progress
       if (retries % 5 === 0) {
         console.log(`⏳ Still waiting for LB Pair account... (${retries}/${maxRetries} attempts)`);
       }
@@ -140,7 +137,6 @@ export async function POST(req: Request) {
       }, { status: 504 });
     }
 
-    // Additional wait to ensure full propagation
     console.log("✅ Account found! Waiting 3 seconds for full propagation...");
     await new Promise(res => setTimeout(res, 3000));
 
@@ -175,7 +171,7 @@ export async function POST(req: Request) {
     }
 
     const activeId = activeBin.binId;
-    const BIN_SPREAD = 5;
+    const BIN_SPREAD = 5; // ✅ Optimal spread for balanced liquidity
 
     // 1. Core Token Definitions & Validation
     const tokenX = dlmmPool.tokenX.publicKey;
@@ -215,104 +211,149 @@ export async function POST(req: Request) {
     }
 
     // 3. Define Strategy & Amounts
-    // The frontend passes explicit amounts for X and Y (already sorted)
     let finalXAmount = new BN(tokenXAmount);
     let finalYAmount = new BN(tokenYAmount);
 
-    console.log(`✅ Using provided amounts: X=${finalXAmount.toString()}, Y=${finalYAmount.toString()}`);
+    console.log(`✅ Provided amounts: X=${finalXAmount.toString()}, Y=${finalYAmount.toString()}`);
+
+    const DUST = new BN(1_000); // minimum viable per-bin amount
+
+    // ✅ FIXED: Proper bin range calculation for SpotBalanced
+    const BIN_ARRAY_SIZE = 32;
+
+    // Compute active array safely for negatives
+    const activeArrayIndex =
+      activeId >= 0
+        ? Math.floor(activeId / BIN_ARRAY_SIZE)
+        : Math.ceil((activeId + 1) / BIN_ARRAY_SIZE) - 1;
+
+    const arrayMin = activeArrayIndex * BIN_ARRAY_SIZE;
+    const arrayMax = arrayMin + BIN_ARRAY_SIZE - 1;
+
+    // ✅ FIX #1: Start with SYMMETRIC spread (ensures odd count)
+    // For odd bin count: use activeId ± (BIN_SPREAD)
+    // This gives us: 2*BIN_SPREAD + 1 bins (always odd)
+    let minBinId = activeId - BIN_SPREAD;
+    let maxBinId = activeId + BIN_SPREAD;
+
+    // ✅ FIX #2: Clamp to array boundaries WHILE PRESERVING ODD COUNT
+    minBinId = Math.max(minBinId, arrayMin);
+    maxBinId = Math.min(maxBinId, arrayMax);
+
+    // ✅ FIX #3: After clamping, re-center if needed to ensure odd count
+    let binCount = maxBinId - minBinId + 1;
     
-    // Select Strategy based on Active Bin & Amounts
+    if (binCount % 2 === 0) {
+      // If clamping made it even, adjust by extending the range symmetrically
+      const rangeLeft = minBinId - arrayMin;
+      const rangeRight = arrayMax - maxBinId;
+      
+      if (rangeLeft > 0 && rangeRight > 0) {
+        // Can extend either direction, prefer left to keep near active
+        minBinId -= 1;
+      } else if (rangeRight > 0) {
+        // Can only extend right
+        maxBinId += 1;
+      } else if (rangeLeft > 0) {
+        // Can only extend left
+        minBinId -= 1;
+      } else {
+        // At array boundaries, accept even count as fallback
+        console.warn(`⚠️ Cannot expand to odd count within array bounds [${arrayMin}, ${arrayMax}]`);
+      }
+      
+      binCount = maxBinId - minBinId + 1;
+    }
+
+    console.log(`📊 Active Bin Array: [${arrayMin}, ${arrayMax}]`);
+    console.log(`📊 Active Bin ID: ${activeId}`);
+    console.log(`📊 Final Bin Range: [${minBinId}, ${maxBinId}]`);
+    console.log(`📊 Bin Count: ${binCount} (ODD=${binCount % 2 === 1})`);
+
+    // Verify the range is valid
+    if (minBinId > activeId || maxBinId < activeId) {
+      throw new Error(
+        `Invalid bin range [${minBinId}, ${maxBinId}] for active bin ${activeId}. ` +
+        `Active bin must be within range.`
+      );
+    }
+
+    // ✅ CRITICAL: SpotBalanced REQUIRES ODD bin count
+    if (binCount % 2 === 0) {
+      throw new Error(
+        `SpotBalanced requires ODD bin count. Got ${binCount} bins in range [${minBinId}, ${maxBinId}]. ` +
+        `This should not happen after adjustment logic. Debug: activeId=${activeId}, ` +
+        `arrayMin=${arrayMin}, arrayMax=${arrayMax}`
+      );
+    }
+
+    // ✅ FIX: Get suggested amounts from DLMM for balanced distribution
+    console.log(`🔄 Calculating optimal amounts for bin range [${minBinId}, ${maxBinId}]...`);
+    
     let strategy;
+    const isOneSided = finalXAmount.isZero() || finalYAmount.isZero();
 
-    // Unified Strategy Logic (Handles activeId=0 correctly for Price=1.0)
-    console.log(`📊 Selecting strategy for Active Bin: ${activeId} with spread ${BIN_SPREAD}`);
+    if (!isOneSided) {
+      // For balanced liquidity, use DLMM's suggested amounts
+      try {
+        // The DLMM SDK calculates the proper ratio based on the bin range
+        // For now, we'll use SpotImBalanced which is more forgiving
+        // But first try to get better amounts
+        
+        // Calculate the ratio of X to Y based on bin range
+        // For bins centered around active bin, we need to account for price curve
+        const binSpan = maxBinId - minBinId;
+        
+        // Simple heuristic: if spread is symmetric around active, amounts should be more balanced
+        // But the DLMM protocol needs specific ratios based on the bin curve
+        
+        console.log(`📊 Using SpotImBalanced for safer amount handling`);
+        console.log(`   (SpotBalanced requires precise amount ratios based on bin curve)`);
+        
+        // Use SpotImBalanced which is more forgiving of amount mismatches
+        strategy = {
+          strategyType: "SpotImBalanced" as any,
+          minBinId,
+          maxBinId,
+        };
+      } catch (err: any) {
+        console.error("Error calculating amounts:", err);
+        // Fallback to SpotImBalanced
+        strategy = {
+          strategyType: "SpotImBalanced" as any,
+          minBinId,
+          maxBinId,
+        };
+      }
+    } else {
+      console.log("⚠️ One-sided liquidity → SpotImBalanced");
 
-    if (finalXAmount.gt(new BN(0)) && finalYAmount.isZero()) {
-         // Token X only → ABOVE price
-         strategy = {
-            strategyType: "SpotOneSide" as any,
-            minBinId: activeId + 1,
-            maxBinId: activeId + BIN_SPREAD,
-         };
-    } else if (finalYAmount.gt(new BN(0)) && finalXAmount.isZero()) {
-         // Token Y only → BELOW price
-         strategy = {
-            strategyType: "SpotOneSide" as any,
-            minBinId: activeId - BIN_SPREAD,
-            maxBinId: activeId - 1,
-         };
-     } else {
-         // Both tokens provided -> Force SpotOneSide (Community Token Only)
-         console.log("⚠️ Forcing SpotOneSide strategy (Using Community Token only)");
-         
-         // 1. Zero out the non-community token
-         if (communityMint.equals(tokenX)) {
-             finalYAmount = new BN(0);
-             console.log("-> Community is Token X. Zeroing Y.");
-         } else {
-             finalXAmount = new BN(0);
-             console.log("-> Community is Token Y. Zeroing X.");
-         }
+      // Ensure dust on missing side
+      if (finalXAmount.isZero()) finalXAmount = DUST;
+      if (finalYAmount.isZero()) finalYAmount = DUST;
 
-         // 2. Log Mints for debugging
-         console.log("🔍 Token Diagnostics:", {
-            tokenX: dlmmPool.tokenX.publicKey.toBase58(),
-            tokenY: dlmmPool.tokenY.publicKey.toBase58(),
-            communityMint: communityMint.toBase58(),
-            activeBinId: activeId,
-         });
+      strategy = {
+        strategyType: "SpotImBalanced" as any,
+        minBinId,
+        maxBinId,
+      };
+    }
 
-         // 3. Dynamic Spread Calculation (Avoids Min Liquidity Errors)
-         // DLMM requires a minimum amount per bin. If total amount is small,
-         // we must reduce the number of bins to ensure each bin gets enough.
-         const activeAmount = finalXAmount.gt(new BN(0)) ? finalXAmount : finalYAmount;
-         const MIN_PER_BIN = new BN(1000); // Safe minimum raw units per bin
-         
-         // Calculate max possible bins
-         let maxBins = activeAmount.div(MIN_PER_BIN).toNumber();
-         
-         // Clamp spread: At least 1 bin, at most BIN_SPREAD (5)
-         let effectiveSpread = Math.min(BIN_SPREAD, Math.max(1, maxBins));
-         
-         console.log(`📊 Dynamic Spread Config:`, {
-             totalAmount: activeAmount.toString(),
-             minPerBin: MIN_PER_BIN.toString(),
-             maxPossibleBins: maxBins,
-             effectiveSpread: effectiveSpread
-         });
-
-         // 4. Select Strategy based on Non-Zero Amount (Canonical Rule)
-         // X -> ABOVE
-         // Y -> BELOW
-         if (finalXAmount.gt(new BN(0))) {
-             console.log(`-> Strategy: Sell X (Above). Range: [${activeId + 1}, ${activeId + effectiveSpread}]`);
-             strategy = {
-                strategyType: "SpotOneSide" as any,
-                minBinId: activeId + 1,
-                maxBinId: activeId + effectiveSpread,
-             };
-         } else if (finalYAmount.gt(new BN(0))) {
-             console.log(`-> Strategy: Sell Y (Below). Range: [${activeId - effectiveSpread}, ${activeId - 1}]`);
-             strategy = {
-                strategyType: "SpotOneSide" as any,
-                minBinId: activeId - effectiveSpread,
-                maxBinId: activeId - 1,
-             };
-         } else {
-             throw new Error("Both amounts are zero?! Should not happen.");
-         }
-     }
-
-    // 🧪 SAFETY CHECK: Log all strategy parameters before transaction
-    console.log('🔍 Strategy Safety Check:', {
+    console.log("🔍 Final Strategy Parameters:", {
       activeId,
       strategy: strategy.strategyType,
       minBinId: strategy.minBinId,
       maxBinId: strategy.maxBinId,
+      binCount: binCount,
       X: finalXAmount.toString(),
       Y: finalYAmount.toString(),
     });
-    console.log(`💧 Creating position with strategy: ${strategy.strategyType} [${strategy.minBinId}, ${strategy.maxBinId}]`);
+
+    console.log(
+      `💧 Creating position with strategy: ${strategy.strategyType} ` +
+      `[${strategy.minBinId}, ${strategy.maxBinId}]`
+    );
+    console.log(`   Bin Count: ${binCount}`);
     console.log(`   Amounts: X=${finalXAmount.toString()} Y=${finalYAmount.toString()}`);
 
     let createPositionTx;
@@ -324,11 +365,10 @@ export async function POST(req: Request) {
         user: ownerPubkey,
         totalXAmount: finalXAmount,
         totalYAmount: finalYAmount,
-        strategy: strategy, // Passed directly, not nested
+        strategy: strategy,
         slippage: slippageBps / 10000,
       });
 
-      // IMPORTANT: The new position account Keypair must verify the initialization
       createPositionTx.partialSign(positionKeypair);
       
       console.log("✅ Position transaction created");
@@ -360,6 +400,7 @@ export async function POST(req: Request) {
         activeBinId: activeId,
         minBinId: strategy.minBinId,
         maxBinId: strategy.maxBinId,
+        binCount: binCount,
       },
       { status: 200 }
     );

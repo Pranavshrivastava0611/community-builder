@@ -20,7 +20,7 @@ export default function CreateCommunityPage() {
   const [communityImage, setCommunityImage] = useState<File | null>(null);
   const [tokenSymbol, setTokenSymbol] = useState('');
   const [tokenDecimals, setTokenDecimals] = useState('0');
-  const [initialSupply, setInitialSupply] = useState('1000000'); // Default to 1M
+  const [initialSupply, setInitialSupply] = useState('1000000000'); // Default to 1B
   const [mintAuthority, setMintAuthority] = useState('');
   const [freezeAuthority, setFreezeAuthority] = useState('');
   const [loading, setLoading] = useState(false);
@@ -598,7 +598,7 @@ export default function CreateCommunityPage() {
       // 6. Create Liquidity Pool (Meteora Integration)
       // For now, hardcode initial SOL and token amounts for LP
       const initialSolAmount = 0.1; // 0.1 SOL
-      const initialTokenAmount = 1000; // 1000 of your new community token
+      const initialTokenAmount = 100000000; // 100,000,000 of your new community token
       const binStep = 100; // Example bin step
       const feeTier = 0.0005; // Example fee tier (0.05%)
 
@@ -754,10 +754,10 @@ export default function CreateCommunityPage() {
                     type="number"
                     id="initialSupply"
                     value={initialSupply}
-                    onChange={(e) => setInitialSupply(e.target.value)}
-                    min="1"
-                    className="w-full px-5 py-4 rounded-xl bg-white/5 text-white border border-white/10 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-300 placeholder-gray-600 font-mono"
-                    placeholder="1000000"
+                    readOnly
+                    disabled
+                    className="w-full px-5 py-4 rounded-xl bg-white/5 text-gray-400 border border-white/10 cursor-not-allowed opacity-50 font-mono"
+                    placeholder="1000000000"
                     required
                   />
                 </div>
