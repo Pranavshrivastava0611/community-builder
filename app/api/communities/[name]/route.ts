@@ -21,7 +21,7 @@ export async function GET(
     const param = await params;
     const name = param.name;
     const names = decodeURIComponent(name);
-    console.log(`🔍 API: Fetching community by name. Raw: '${params.name}', Decoded: '${name}'`);
+    console.log(`🔍 API: Fetching community by name. Raw: '${name}', Decoded: '${names}'`);
 
     // 1. Fetch Community Details (Case-insensitive)
     const { data: community, error } = await supabaseAdmin
@@ -38,7 +38,7 @@ export async function GET(
     }
 
     // 2. Fetch Member Count
-    const { count: memberCount, error: countError } = await supabaseAdmin
+    const { count: memberCount } = await supabaseAdmin
       .from("community_members")
       .select("*", { count: "exact", head: true })
       .eq("community_id", community.id);

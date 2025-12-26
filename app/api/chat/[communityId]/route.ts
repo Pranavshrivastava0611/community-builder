@@ -14,11 +14,10 @@ const supabaseAdmin = createClient(
 
 export async function GET(
   req: Request,
-  { params }: { params: { communityId: string } }
+  { params }: { params: Promise<{ communityId: string }> }
 ) {
-  const param = await params
+  const { communityId } = await params;
   try {
-    const { communityId } = await param;
 
     // Fetch last 50 messages
     // We try to join with profiles if possible, otherwise just raw data

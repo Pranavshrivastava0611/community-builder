@@ -74,9 +74,10 @@ export default function CommunityChat({ communityId, currentWallet, isMember }: 
                 },
                 (payload: any) => {
                     const newMsg = payload.new as Message;
-                    // Optimistically we might have added it, avoid dupe if ID matches? 
-                    // But our API fetch is history. Realtime is new.
-                    setMessages((prev) => [...prev, newMsg]);
+                    setMessages((prev) => {
+                        if (prev.some(m => m.id === newMsg.id)) return prev;
+                        return [...prev, newMsg];
+                    });
                     scrollToBottom();
                 }
             )
@@ -120,9 +121,15 @@ export default function CommunityChat({ communityId, currentWallet, isMember }: 
 
             if (!res.ok) throw new Error("Failed to send");
 
-            // We don't need to manually add to state because Realtime will push it back to us.
-            // But for lower latency feel, we could optimistic update.
-            // Let's rely on Realtime for consistency for now.
+            const data = await res.json();
+            if (data.message) {
+                setMessages((prev) => {
+                    // Check duplicate just in case realtime arrived super fast
+                    if (prev.some(m => m.id === data.message.id)) return prev;
+                    return [...prev, data.message];
+                });
+                scrollToBottom();
+            }
 
         } catch (error) {
             console.error(error);
