@@ -5,60 +5,48 @@ import GlowButton from "@/components/GlowButton";
 import Navbar from "@/components/Navbar";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
-const communities = [
-  {
-    name: "Solana Builders",
-    members: 4200,
-    banner: "/images/solana-builders.jpg",
-    desc: "A hub for developers building on Solana.",
-    link: "/communities/solana-builders",
-  },
-  {
-    name: "NFT Artists",
-    members: 2100,
-    banner: "/images/nft-artists.jpg",
-    desc: "Showcase, collaborate, and mint your art.",
-    link: "/communities/nft-artists",
-  },
-  {
-    name: "DeFi Wizards",
-    members: 3200,
-    banner: "/images/defi-wizards.jpg",
-    desc: "Explore the future of decentralized finance.",
-    link: "/communities/defi-wizards",
-  },
-  {
-    name: "Gaming Guild",
-    members: 1800,
-    banner: "/images/gaming-guild.jpg",
-    desc: "Connect with game devs and players.",
-    link: "/communities/gaming-guild",
-  },
-  {
-    name: "DAO Governance",
-    members: 850,
-    banner: "/images/dao-governance.jpg",
-    desc: "Learn and participate in decentralized autonomous organizations.",
-    link: "/communities/dao-governance",
-  },
-  {
-    name: "Solana Dev Tools",
-    members: 1500,
-    banner: "/images/solana-dev-tools.jpg",
-    desc: "Discover and contribute to essential Solana development tools.",
-    link: "/communities/solana-dev-tools",
-  },
-];
+// Types matching database schema + UI needs
+interface Community {
+  id: string;
+  name: string;
+  description: string;
+  image_url: string;
+  members?: number; // Optional, placeholder for now
+  created_at?: string;
+}
 
 export default function CommunityPage() {
+  const [communities, setCommunities] = useState<Community[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchCommunities() {
+      try {
+        const res = await fetch("/api/communities");
+        const data = await res.json();
+        if (data.communities) {
+          setCommunities(data.communities);
+        }
+      } catch (error) {
+        console.error("Failed to fetch communities", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCommunities();
+  }, []);
+
   return (
     <div className="min-h-screen bg-black text-white font-sans relative overflow-hidden selection:bg-orange-500/30">
-
       {/* Background Visuals */}
       <div
         className="absolute inset-0 z-0 bg-grid-pattern pointer-events-none"
-        style={{ maskImage: 'linear-gradient(to bottom, black 20%, transparent 90%)' }}
+        style={{
+          maskImage: "linear-gradient(to bottom, black 20%, transparent 90%)",
+        }}
       ></div>
       <div className="absolute top-0 right-1/4 w-[800px] h-[600px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen opacity-50"></div>
       <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none opacity-40"></div>
@@ -70,9 +58,7 @@ export default function CommunityPage() {
           <h3 className="text-2xl font-bold font-heading text-white mb-4">
             Filters
           </h3>
-          <GlowButton className="w-full text-lg py-3">
-            Most Active
-          </GlowButton>
+          <GlowButton className="w-full text-lg py-3">Most Active</GlowButton>
           <GlowButton className="w-full text-lg py-3 !bg-none !bg-white/5 border border-white/10 !text-gray-300 hover:!text-white hover:!border-orange-500/50 hover:!bg-white/10">
             Newest
           </GlowButton>
@@ -91,7 +77,10 @@ export default function CommunityPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl sm:text-6xl font-black font-heading text-white text-center sm:text-left tracking-tighter"
             >
-              Explore <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-200">Communities</span>
+              Explore{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-200">
+                Communities
+              </span>
             </motion.h2>
 
             {/* Search Bar */}
@@ -118,65 +107,80 @@ export default function CommunityPage() {
           </div>
 
           {/* Community Cards */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ staggerChildren: 0.15 }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"
-          >
-            {communities.map((c, i) => (
-              <Link href={c.link} key={i}>
-                <motion.div
-                  whileHover={{
-                    scale: 1.02,
-                    boxShadow: "0 10px 30px rgba(249, 115, 22, 0.15)",
-                  }}
-                  className="relative block group transition-all duration-500 h-full"
-                >
-                  <GlassPanel className="h-full overflow-hidden border border-white/10 group-hover:border-orange-500/50 rounded-2xl bg-white/5 backdrop-blur-sm transition duration-500 shadow-lg hover:shadow-orange-500/10 flex flex-col">
-                    <div className="relative h-48 overflow-hidden rounded-t-2xl flex-shrink-0">
-                      <div className="absolute inset-0 bg-gray-800 animate-pulse"></div>
-                      <img
-                        src={c.banner}
-                        alt={c.name}
-                        className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700 ease-out relative z-10"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                      {/* Fallback gradient if image fails or loading */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-black hover:from-gray-700 transition-colors -z-0"></div>
+          {loading ? (
+            <div className="text-center py-20 text-gray-400 animate-pulse">
+              Loading communities...
+            </div>
+          ) : communities.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              No communities found. Be the first to create one!
+            </div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ staggerChildren: 0.15 }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"
+            >
+              {communities.map((c) => (
+                <Link href={`/communities/${c.name}`} key={c.id}>
+                  <motion.div
+                    whileHover={{
+                      scale: 1.02,
+                      boxShadow: "0 10px 30px rgba(249, 115, 22, 0.15)",
+                    }}
+                    className="relative block group transition-all duration-500 h-full"
+                  >
+                    <GlassPanel className="h-full overflow-hidden border border-white/10 group-hover:border-orange-500/50 rounded-2xl bg-white/5 backdrop-blur-sm transition duration-500 shadow-lg hover:shadow-orange-500/10 flex flex-col">
+                      <div className="relative h-48 overflow-hidden rounded-t-2xl flex-shrink-0">
+                        <div className="absolute inset-0 bg-gray-800 animate-pulse"></div>
+                        <img
+                          src={
+                            c.image_url && c.image_url.startsWith("http")
+                              ? c.image_url
+                              : "/images/placeholder-community.jpg" // Fallback
+                          }
+                          alt={c.name}
+                          className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-700 ease-out relative z-10"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                        {/* Fallback gradient if image fails or loading */}
+                        <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-black hover:from-gray-700 transition-colors -z-0"></div>
 
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-20"></div>
-                      <div className="absolute bottom-0 left-0 p-5 text-white z-30">
-                        <h3 className="text-2xl font-bold font-heading mb-1 tracking-tight">
-                          {c.name}
-                        </h3>
-                        <p className="text-xs font-mono text-orange-400 bg-black/50 px-2 py-1 rounded inline-block">
-                          {c.members.toLocaleString()} members
-                        </p>
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-20"></div>
+                        <div className="absolute bottom-0 left-0 p-5 text-white z-30">
+                          <h3 className="text-2xl font-bold font-heading mb-1 tracking-tight truncate pr-4">
+                            {c.name}
+                          </h3>
+                          <p className="text-xs font-mono text-orange-400 bg-black/50 px-2 py-1 rounded inline-block">
+                            {/* Placeholder member count logic until DB join implemented */}
+                            {(c.members || 1).toLocaleString()} members
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-6 flex flex-col flex-1">
-                      <p className="text-gray-400 mb-6 text-sm leading-relaxed flex-1">
-                        {c.desc}
-                      </p>
-                      <GlowButton className="w-full text-sm py-2">
-                        View Community
-                      </GlowButton>
-                    </div>
-                  </GlassPanel>
-                </motion.div>
-              </Link>
-            ))}
-          </motion.div>
+                      <div className="p-6 flex flex-col flex-1">
+                        <p className="text-gray-400 mb-6 text-sm leading-relaxed flex-1 line-clamp-3">
+                          {c.description}
+                        </p>
+                        <GlowButton className="w-full text-sm py-2">
+                          View Community
+                        </GlowButton>
+                      </div>
+                    </GlassPanel>
+                  </motion.div>
+                </Link>
+              ))}
+            </motion.div>
+          )}
         </div>
       </main>
 
       {/* Footer */}
       <footer className="relative z-10 w-full px-8 py-8 text-center border-t border-white/10 bg-black/40 backdrop-blur-md mt-10 rounded-t-2xl">
         <div className="flex justify-center gap-6 mb-3">
-          {['Twitter', 'Docs', 'Discord'].map(link => (
+          {["Twitter", "Docs", "Discord"].map((link) => (
             <a
               key={link}
               href="#"
@@ -187,7 +191,8 @@ export default function CommunityPage() {
           ))}
         </div>
         <p className="text-gray-600 text-xs">
-          &copy; {new Date().getFullYear()} Solana Community — Crafted with precision.
+          &copy; {new Date().getFullYear()} Solana Community — Crafted with
+          precision.
         </p>
       </footer>
     </div>

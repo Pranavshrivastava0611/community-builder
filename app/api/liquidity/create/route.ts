@@ -2,6 +2,7 @@
 import DLMM from "@meteora-ag/dlmm";
 import { Connection, PublicKey, Transaction } from "@solana/web3.js";
 import { createClient } from "@supabase/supabase-js";
+//@ts-ignore
 import BN from "bn.js";
 import bs58 from "bs58";
 import jwt from "jsonwebtoken";
