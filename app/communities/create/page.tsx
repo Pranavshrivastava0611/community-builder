@@ -4,7 +4,7 @@ import GlassPanel from '@/components/GlassPanel';
 import GlowButton from '@/components/GlowButton';
 import Navbar from '@/components/Navbar';
 import { useWallet } from '@solana/wallet-adapter-react';
-import { clusterApiUrl, Connection, Transaction } from '@solana/web3.js';
+import { clusterApiUrl, Connection, Keypair, Transaction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -310,6 +310,7 @@ export default function CreateCommunityPage() {
 
       // CRITICAL: Get a fresh blockhash before sending
       try {
+        // 1. Get fresh blockhash (User-side, so it's valid when user signs)
         const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
         transaction.recentBlockhash = blockhash;
         transaction.lastValidBlockHeight = lastValidBlockHeight;
@@ -320,27 +321,30 @@ export default function CreateCommunityPage() {
         }
 
         console.log('Updated with fresh blockhash:', blockhash);
-        console.log('Last valid block height:', lastValidBlockHeight);
 
-        // Validate transaction before sending
-        if (!transaction.feePayer) {
-          throw new Error('Transaction missing feePayer');
+        // 2. Sign with Ephemeral Position Keypair (from backend)
+        if (data.positionKeypair) {
+          const positionKeypair = Keypair.fromSecretKey(new Uint8Array(data.positionKeypair));
+          transaction.partialSign(positionKeypair);
+          console.log("✅ Partially signed with ephemeral position keypair");
+        } else {
+          console.warn("⚠️ No position keypair returned from backend. Transaction may fail if not already signed.");
         }
 
-        if (!transaction.recentBlockhash) {
-          throw new Error('Transaction missing recentBlockhash');
+        // 3. User Wallet Signature & Send
+        if (!signTransaction) {
+          throw new Error("Wallet does not support signTransaction method");
         }
 
-        if (!publicKey) {
-          throw new Error('Wallet not connected');
-        }
-
-        console.log('Sending add liquidity transaction...');
-
+        console.log('Requesting wallet signature...');
         setSuccess('Please approve the transaction in your wallet...');
 
-        // Send the transaction with proper options
-        const signature = await sendTransaction(transaction, connection, {
+        const signedTx = await signTransaction(transaction);
+
+        console.log('Sending raw transaction...');
+
+        // Send the transaction
+        const signature = await connection.sendRawTransaction(signedTx.serialize(), {
           skipPreflight: false,
           preflightCommitment: 'confirmed',
           maxRetries: 3,
