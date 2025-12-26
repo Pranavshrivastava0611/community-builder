@@ -1,5 +1,6 @@
 "use client";
 
+import CommunityChat from "@/components/CommunityChat";
 import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
 import Navbar from "@/components/Navbar";
@@ -23,9 +24,10 @@ interface CommunityDetail {
 
 export default function CommunityDetailPage() {
     const params = useParams(); // Use hook for client component
-    const communityName = decodeURIComponent(params.name as string);
+    const communityName = decodeURIComponent(params!.name as string);
     const router = useRouter();
-    const { connected } = useWallet();
+    const { connected, publicKey } = useWallet();
+    const [activeTab, setActiveTab] = useState<"overview" | "chat">("overview");
 
     const [community, setCommunity] = useState<CommunityDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -155,14 +157,38 @@ export default function CommunityDetailPage() {
                 </motion.div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                    {/* Left Column: Description & Interactions */}
                     <div className="lg:col-span-2 space-y-8">
-                        <GlassPanel className="p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl">
-                            <h2 className="text-2xl font-bold mb-4 text-orange-100">About</h2>
-                            <p className="text-gray-300 leading-relaxed text-lg whitespace-pre-wrap">
-                                {community.description}
-                            </p>
-                        </GlassPanel>
+
+                        {/* Tabs */}
+                        <div className="flex gap-4 border-b border-white/10 pb-1">
+                            <button
+                                onClick={() => setActiveTab("overview")}
+                                className={`pb-3 text-lg font-bold transition-colors ${activeTab === "overview" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
+                            >
+                                Overview
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("chat")}
+                                className={`pb-3 text-lg font-bold transition-colors ${activeTab === "chat" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
+                            >
+                                Chat
+                            </button>
+                        </div>
+
+                        {activeTab === "overview" ? (
+                            <GlassPanel className="p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl">
+                                <h2 className="text-2xl font-bold mb-4 text-orange-100">About</h2>
+                                <p className="text-gray-300 leading-relaxed text-lg whitespace-pre-wrap">
+                                    {community.description}
+                                </p>
+                            </GlassPanel>
+                        ) : (
+                            <CommunityChat
+                                communityId={community.id}
+                                currentWallet={publicKey?.toBase58()}
+                                isMember={community.isJoined}
+                            />
+                        )}
 
                         <div className="flex flex-col md:flex-row gap-4">
                             {community.isJoined ? (
