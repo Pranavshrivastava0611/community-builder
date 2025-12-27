@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 // @ts-ignore
-import jwt from 'jsonwebtoken'; // Temporarily ignore type error due to npm issue
 
 interface UserProfile {
   id: string;
@@ -16,8 +15,16 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Edit States
+  const [editUsername, setEditUsername] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editAvatar, setEditAvatar] = useState("");
+
   const router = useRouter();
 
   useEffect(() => {
@@ -27,23 +34,13 @@ export default function ProfilePage() {
       const token = localStorage.getItem('authToken');
 
       if (!token) {
-        router.push('/'); // Redirect to home if not authenticated
+        router.push('/');
         return;
       }
 
       try {
-        // Note: For full security, token verification should always happen on the server.
-        const decodedToken: any = jwt.decode(token);
-        if (!decodedToken || !decodedToken.id) {
-          localStorage.removeItem('authToken');
-          router.push('/');
-          return;
-        }
-
         const response = await fetch('/api/profile', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
+          headers: { 'Authorization': `Bearer ${token}` },
         });
 
         if (!response.ok) {
@@ -52,13 +49,15 @@ export default function ProfilePage() {
         }
 
         const data = await response.json();
-        setUserProfile(data.profile);
+        const profile = data.profile;
+        setUserProfile(profile);
+        setEditUsername(profile.username || "");
+        setEditBio(profile.bio || "");
+        setEditAvatar(profile.avatar_url || "");
 
       } catch (err: any) {
         console.error('Error fetching profile:', err);
         setError(err.message || 'An error occurred while loading profile.');
-        localStorage.removeItem('authToken');
-        router.push('/');
       } finally {
         setLoading(false);
       }
@@ -67,88 +66,171 @@ export default function ProfilePage() {
     fetchProfile();
   }, [router]);
 
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      const token = localStorage.getItem('authToken');
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: editUsername,
+          bio: editBio,
+          avatar_url: editAvatar
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setUserProfile(data.profile);
+        setIsEditing(false);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to update profile");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error saving profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const randomizeAvatar = () => {
+    const newSeed = Math.random().toString(36).substring(7);
+    setEditAvatar(`https://api.dicebear.com/7.x/avataaars/svg?seed=${newSeed}`);
+  };
+
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center"><p className="text-xl text-gray-500">Loading profile...</p></div>;
-  }
-  if (error) {
-    return <div className="flex min-h-screen items-center justify-center"><p className="text-xl text-red-500">Error: {error}</p></div>;
+    return <div className="flex min-h-screen bg-black items-center justify-center animate-pulse text-orange-400 font-black italic text-2xl tracking-tighter">LOADING IDENTITY...</div>;
   }
 
   if (!userProfile) {
-    return <div className="flex min-h-screen items-center justify-center"><p className="text-xl text-gray-500">No profile data found.</p></div>;
+    return <div className="flex min-h-screen bg-black items-center justify-center text-white">No Profile Found</div>;
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-black text-white font-sans relative overflow-hidden selection:bg-orange-500/30">
+    <div className="min-h-screen flex flex-col bg-black text-white font-sans relative overflow-x-hidden selection:bg-orange-500/30">
+      <div className="absolute inset-0 z-0 bg-grid-pattern pointer-events-none opacity-20"></div>
 
-      {/* Background Visuals */}
-      <div
-        className="absolute inset-0 z-0 bg-grid-pattern pointer-events-none"
-        style={{ maskImage: 'linear-gradient(to bottom, black 20%, transparent 90%)' }}
-      ></div>
-      <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-orange-600/10 rounded-full blur-[120px] pointer-events-none mix-blend-screen opacity-50"></div>
-      <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none opacity-40"></div>
-
-      {/* Header */}
       <header className="w-full px-8 py-6 flex justify-between items-center border-b border-white/5 bg-black/30 backdrop-blur-md sticky top-0 z-50">
-        <h1 className="text-2xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
-          My <span className="text-orange-500">Profile</span>
+        <h1 className="text-2xl font-black tracking-tighter text-white">
+          MY<span className="text-orange-500">PROFILE</span>
         </h1>
-        <Link href="/">
-          <button className="px-5 py-2 text-sm bg-white/5 border border-white/10 text-white font-medium rounded-full hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300">
-            Back to Home
+        <Link href="/feed">
+          <button className="px-6 py-2 text-xs font-black bg-white/5 border border-white/10 text-white uppercase tracking-widest rounded-full hover:bg-white/10 transition-all">
+            Back to Feed
           </button>
         </Link>
       </header>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-4 py-12 text-center relative z-10 animate-fade-in-up">
-        <div className="bg-white/5 backdrop-blur-md p-10 rounded-2xl shadow-2xl border border-white/10 hover:border-orange-500/20 transition-all duration-500 max-w-2xl w-full relative overflow-hidden group">
+      <main className="flex-1 flex flex-col items-center py-12 px-4 relative z-10">
+        <div className="w-full max-w-2xl bg-white/5 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 md:p-12 shadow-2xl overflow-hidden relative group">
+          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-500 via-rose-500 to-rose-600"></div>
 
-          {/* Decorative gradients inside card */}
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 via-yellow-500 to-transparent opacity-50"></div>
-
-          <div className="w-24 h-24 bg-gradient-to-br from-orange-500 to-yellow-600 rounded-full mx-auto mb-6 flex items-center justify-center text-4xl font-bold text-white shadow-lg ring-4 ring-black/50">
-            {userProfile.username?.[0]?.toUpperCase() || 'U'}
-          </div>
-
-          <h2 className="text-4xl font-black mb-2 tracking-tight text-white">
-            {userProfile.username || 'Anonymous User'}
-          </h2>
-          <p className="text-sm font-mono text-orange-400 mb-8 bg-orange-500/10 py-1 px-3 rounded-full inline-block border border-orange-500/20">
-            {userProfile.public_key || "No Key"}
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left mb-8">
-            <div className="bg-black/20 p-4 rounded-xl border border-white/5">
-              <p className="text-xs uppercase tracking-widest text-gray-500 mb-2 font-semibold">About</p>
-              <p className="text-md text-gray-300 leading-relaxed">
-                Passionate about Solana and Web3. Always learning, building, and sharing.
-              </p>
-            </div>
-            <div className="bg-black/20 p-4 rounded-xl border border-white/5">
-              <p className="text-xs uppercase tracking-widest text-gray-500 mb-2 font-semibold">Achievements</p>
-              <div className="flex flex-wrap gap-2">
-                {['Early Adopter', 'Builder', 'OG'].map(badge => (
-                  <span key={badge} className="px-3 py-1 bg-gradient-to-r from-gray-800 to-gray-900 border border-white/10 text-white rounded-lg text-xs font-medium shadow-sm hover:border-orange-500/50 transition-colors cursor-default">
-                    {badge}
-                  </span>
-                ))}
+          {/* Avatar Section */}
+          <div className="flex flex-col items-center mb-10">
+            <div className="relative group/avatar">
+              <div className="w-32 h-32 rounded-full bg-gradient-to-tr from-orange-400 to-rose-600 p-[3px] shadow-2xl shadow-orange-500/20 mb-6">
+                <div className="w-full h-full rounded-full bg-black border-4 border-black overflow-hidden relative">
+                  {(isEditing ? editAvatar : userProfile.avatar_url) ? (
+                    <img src={isEditing ? editAvatar : userProfile.avatar_url} className="w-full h-full object-cover" alt="" />
+                  ) : (
+                    <img
+                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile.public_key}`}
+                      className="w-full h-full object-cover"
+                      alt=""
+                    />
+                  )}
+                </div>
               </div>
+              {isEditing && (
+                <button
+                  onClick={randomizeAvatar}
+                  className="absolute bottom-6 right-0 bg-white text-black p-2 rounded-full hover:scale-110 transition-transform shadow-lg"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                </button>
+              )}
+            </div>
+
+            {isEditing ? (
+              <input
+                value={editUsername}
+                onChange={e => setEditUsername(e.target.value)}
+                className="text-4xl font-black text-center bg-transparent border-b-2 border-orange-500/50 outline-none w-full max-w-sm pb-2 placeholder:opacity-30"
+                placeholder="Username"
+              />
+            ) : (
+              <h2 className="text-4xl font-black tracking-tight mb-2 uppercase">{userProfile.username}</h2>
+            )}
+
+            <p className="text-xs font-mono text-white/40 bg-white/5 px-4 py-1.5 rounded-full border border-white/5 mt-4">
+              {userProfile.public_key}
+            </p>
+          </div>
+
+          {/* Bio Section */}
+          <div className="space-y-6 mb-12">
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 mb-3 block">Perspective</label>
+              {isEditing ? (
+                <textarea
+                  value={editBio}
+                  onChange={e => setEditBio(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-2xl p-6 text-gray-200 outline-none focus:border-orange-500/50 min-h-[120px] resize-none font-medium leading-relaxed"
+                  placeholder="Tell your story..."
+                />
+              ) : (
+                <div className="bg-black/20 border border-white/5 rounded-2xl p-6 relative overflow-hidden">
+                  <p className="text-gray-300 text-lg leading-relaxed italic relative z-10">
+                    {userProfile.bio || "No bio yet. Tell the community about yourself."}
+                  </p>
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl rounded-full"></div>
+                </div>
+              )}
             </div>
           </div>
 
-          <Link href="/">
-            <button className="w-full py-4 rounded-xl bg-white text-black font-bold text-lg hover:bg-gray-200 transition-all duration-300 shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,165,0,0.4)] relative overflow-hidden group/btn">
-              <span className="relative z-10">Return to Dashboard</span>
-              <div className="absolute inset-0 bg-gradient-to-r from-orange-200 to-white opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300 mix-blend-overlay"></div>
-            </button>
-          </Link>
+          <div className="flex gap-4">
+            {isEditing ? (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 py-4 bg-white text-black font-black uppercase text-sm tracking-widest rounded-2xl hover:bg-orange-500 hover:text-white transition-all disabled:opacity-50"
+                >
+                  {saving ? "SAVING..." : "CONFIRM UPDATES"}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditUsername(userProfile.username);
+                    setEditBio(userProfile.bio || "");
+                    setEditAvatar(userProfile.avatar_url || "");
+                  }}
+                  className="px-8 py-4 bg-white/5 border border-white/10 text-white font-black uppercase text-sm tracking-widest rounded-2xl hover:bg-white/10 transition-all"
+                >
+                  CANCEL
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="w-full py-5 bg-gradient-to-r from-orange-400 to-rose-600 text-white font-black uppercase text-sm tracking-[0.2em] rounded-2xl shadow-xl shadow-orange-500/20 hover:scale-[1.02] active:scale-95 transition-all"
+              >
+                CUSTOMIZE IDENTITY
+              </button>
+            )}
+          </div>
         </div>
       </main>
 
-      <footer className="w-full px-8 py-6 text-center text-gray-600 text-xs border-t border-white/5 relative z-10 bg-black/20">
-        &copy; {new Date().getFullYear()} Solana Community. All rights reserved.
+      <footer className="w-full px-8 py-8 text-center border-t border-white/5">
+        <p className="text-[10px] font-black text-white/20 uppercase tracking-[0.3em]">SECURED BY SOLANA & METEORA</p>
       </footer>
     </div>
   );

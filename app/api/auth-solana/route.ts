@@ -82,6 +82,7 @@ export async function POST(req: Request) {
     if (!profileData) {
       const newProfileId = (globalThis as any).crypto?.randomUUID?.() || String(Date.now());
       const defaultUsername = `user_${String(publicKey).substring(0, 6)}`;
+      const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${publicKey}`;
 
       const { data: createdProfile, error: insertProfileError } = await supabaseAdmin
         .from('profiles')
@@ -89,8 +90,9 @@ export async function POST(req: Request) {
           id: newProfileId,
           public_key: publicKey,
           username: defaultUsername,
+          avatar_url: defaultAvatar
         })
-        .select('id, public_key, username')
+        .select('id, public_key, username, avatar_url')
         .maybeSingle();
 
       if (insertProfileError) {

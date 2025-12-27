@@ -126,6 +126,13 @@ export default function GlobalFeed() {
                     setPosts(prev => [formatted, ...prev]);
                 }
             })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts' }, (payload) => {
+                setPosts(prev => prev.map(p =>
+                    p.id === payload.new.id
+                        ? { ...p, like_count: payload.new.like_count }
+                        : p
+                ));
+            })
             .subscribe();
 
         return () => { supabase.removeChannel(channel); };
@@ -206,8 +213,12 @@ export default function GlobalFeed() {
                 <div className="mt-auto mb-6 w-full">
                     <Link href="/profile" className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-orange-400 to-rose-500 p-[1.5px]">
-                            <div className="w-full h-full rounded-full bg-black border border-black/50 overflow-hidden">
-                                {userProfile?.avatar_url && <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="" />}
+                            <div className="w-full h-full rounded-full bg-black border border-black/50 overflow-hidden relative">
+                                <img
+                                    src={userProfile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile?.username || 'guest'}`}
+                                    className="w-full h-full object-cover"
+                                    alt=""
+                                />
                             </div>
                         </div>
                         <span className="hidden lg:block font-bold">Profile</span>
@@ -238,8 +249,12 @@ export default function GlobalFeed() {
                 <div className="flex items-center justify-between mb-8">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-orange-400 to-rose-500 p-[1.5px]">
-                            <div className="w-full h-full rounded-full bg-black border border-white/10 overflow-hidden">
-                                {userProfile?.avatar_url && <img src={userProfile.avatar_url} className="w-full h-full object-cover" alt="" />}
+                            <div className="w-full h-full rounded-full bg-black border border-white/10 overflow-hidden relative">
+                                <img
+                                    src={userProfile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userProfile?.username || 'guest'}`}
+                                    className="w-full h-full object-cover"
+                                    alt=""
+                                />
                             </div>
                         </div>
                         <div>

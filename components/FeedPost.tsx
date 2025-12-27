@@ -34,6 +34,12 @@ interface FeedPostProps {
 
 export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostProps) {
     const [post, setPost] = useState(initialPost);
+
+    // Keep internal state in sync with parent (Realtime updates)
+    useEffect(() => {
+        setPost(initialPost);
+    }, [initialPost]);
+
     const [liking, setLiking] = useState(false);
     const [expanded, setExpanded] = useState(false);
     const [comments, setComments] = useState<any[]>([]);
@@ -71,30 +77,51 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
         return () => { supabase.removeChannel(channel); };
     }, [post.id]);
 
-    const handleLike = async () => {
-        if (liking) return;
-        setLiking(true);
-        const previousLiked = post.isLiked;
-        onLikeToggle(post.id, !previousLiked);
-        try {
-            const token = localStorage.getItem("authToken");
-            if (!token) {
-                toast.error("Please login");
-                onLikeToggle(post.id, previousLiked);
-                return;
+    // Like Buffer / Batching Logic to handle high-frequency clicks
+    const [pendingLike, setPendingLike] = useState<boolean | null>(null);
+
+    useEffect(() => {
+        if (pendingLike === null) return;
+
+        // Collect all clicks and only hit the DB once the user settles
+        const bufferTimeout = setTimeout(async () => {
+            try {
+                const token = localStorage.getItem("authToken");
+                if (!token) {
+                    toast.error("Please login to like");
+                    setPendingLike(null);
+                    return;
+                }
+
+                // Call API only once with the final intent
+                const res = await fetch("/api/feed/like", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                    body: JSON.stringify({ postId: post.id })
+                });
+
+                if (!res.ok) throw new Error("Sync failed");
+            } catch (error) {
+                console.error("Like buffer sync error:", error);
+                // Revert UI on error
+                onLikeToggle(post.id, !pendingLike);
+            } finally {
+                setPendingLike(null);
             }
-            const res = await fetch("/api/feed/like", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-                body: JSON.stringify({ postId: post.id })
-            });
-            if (!res.ok) throw new Error("Failed");
-        } catch {
-            onLikeToggle(post.id, previousLiked);
-            toast.error("Failed to like");
-        } finally {
-            setLiking(false);
-        }
+        }, 1200); // 1.2s batching window
+
+        return () => clearTimeout(bufferTimeout);
+    }, [pendingLike, post.id, onLikeToggle]);
+
+    const handleLike = () => {
+        if (liking) return;
+        const newLikedState = !post.isLiked;
+
+        // Instant Feedback (Optimistic UI)
+        onLikeToggle(post.id, newLikedState);
+
+        // Add to buffer
+        setPendingLike(newLikedState);
     };
 
     const toggleComments = async () => {
@@ -221,8 +248,12 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
             <div className="flex items-center justify-between px-2 mb-3">
                 <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-400 to-rose-500 p-[1.5px]">
-                        <div className="w-full h-full rounded-full bg-black border border-black overflow-hidden">
-                            {post.user?.avatar_url && <img src={post.user.avatar_url} alt="" className="w-full h-full object-cover" />}
+                        <div className="w-full h-full rounded-full bg-black border border-black overflow-hidden relative">
+                            <img
+                                src={post.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user?.username || post.user_id}`}
+                                alt=""
+                                className="w-full h-full object-cover"
+                            />
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
