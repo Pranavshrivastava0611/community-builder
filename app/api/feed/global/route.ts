@@ -41,7 +41,8 @@ export async function GET(req: Request) {
         *,
         author:profiles(username, avatar_url),
         community:communities(name, image_url),
-        comments(count)
+        comments(count),
+        media(file_url)
       `)
       .order("created_at", { ascending: false })
       .limit(100); // Pool size
@@ -68,7 +69,8 @@ export async function GET(req: Request) {
             user_id: p.author_id,
             trendScore: score,
             like_count: likeCount,
-            comment_count: commentCount
+            comment_count: commentCount,
+            image_url: p.media?.[0]?.file_url || null
         };
     });
 

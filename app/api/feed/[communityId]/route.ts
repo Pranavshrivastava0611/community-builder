@@ -39,7 +39,8 @@ export async function GET(
       .select(`
         *,
         author:profiles(username, avatar_url),
-        comments(count)
+        comments(count),
+        media(file_url)
       `)
       .eq("community_id", communityId)
       .order("created_at", { ascending: false })
@@ -55,7 +56,8 @@ export async function GET(
         ...p,
         user: p.author,
         comment_count: p.comments?.[0]?.count || 0,
-        like_count: p.like_count || 0 // Fallback
+        like_count: p.like_count || 0,
+        image_url: p.media?.[0]?.file_url || null
     }));
 
     let enrichedPosts = mappedPosts;

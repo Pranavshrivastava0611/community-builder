@@ -10,6 +10,7 @@ interface Post {
     community_id: string;
     user_id: string;
     content: string;
+    image_url?: string;
     created_at: string;
     like_count: number;
     comment_count: number;
@@ -68,7 +69,8 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
                         .select(`
                             *,
                             author:profiles(username, avatar_url),
-                            comments(count)
+                            comments(count),
+                            media(file_url)
                         `)
                         .eq('id', payload.new.id)
                         .single();
@@ -80,6 +82,7 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
                             user_id: fullPost.author_id,
                             like_count: fullPost.like_count || 0,
                             comment_count: fullPost.comments?.[0]?.count || 0,
+                            image_url: fullPost.media?.[0]?.file_url || null,
                             isLiked: false
                         };
                         setPosts(prev => {

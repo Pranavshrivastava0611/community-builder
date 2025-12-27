@@ -36,9 +36,9 @@ export async function POST(req: Request) {
     }
 
     // 2. Body Parser
-    const { communityId, content } = await req.json();
+    const { communityId, content, imageUrl } = await req.json();
 
-    if (!communityId || !content?.trim()) {
+    if (!communityId || (!content?.trim() && !imageUrl)) {
         return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
     }
 
@@ -80,7 +80,6 @@ export async function POST(req: Request) {
             // Check balance
             const response = await connection.getParsedTokenAccountsByOwner(owner, { mint });
             const amount = response.value[0]?.account.data.parsed.info.tokenAmount.uiAmount || 0;
-            console.log(amount);  
             if (amount <= 0) {
                 return NextResponse.json({ error: "Buy or swap community token to post" }, { status: 403 });
             }
@@ -91,22 +90,41 @@ export async function POST(req: Request) {
     }
 
     // 4. Insert Post
-    const { data, error } = await supabaseAdmin
+    const { data: postData, error: postError } = await supabaseAdmin
         .from("posts")
         .insert({
             community_id: communityId,
             author_id: userId,
-            content
+            content,
+            post_type: imageUrl ? 'image' : 'text'
         })
         .select()
         .single();
 
-    if (error) {
-        console.error("Post create error:", error);
+    if (postError) {
+        console.error("Post create error:", postError);
         return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
     }
 
-    return NextResponse.json({ post: data }, { status: 200 });
+    // 5. Handle Image (if exists)
+    if (imageUrl) {
+        const { error: mediaError } = await supabaseAdmin
+            .from("media")
+            .insert({
+                post_id: postData.id,
+                community_id: communityId,
+                uploader_id: userId,
+                media_type: 'image',
+                file_url: imageUrl
+            });
+
+        if (mediaError) {
+            console.error("Media insert error:", mediaError);
+            // We don't fail the whole request but log it
+        }
+    }
+
+    return NextResponse.json({ post: postData }, { status: 200 });
 
   } catch (error: any) {
     console.error("API /api/feed/create error:", error);

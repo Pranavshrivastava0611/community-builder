@@ -23,7 +23,10 @@ export async function GET(req: Request) {
     // TODO: Join with members count if possible efficiently
     const { data: communities, error } = await supabaseAdmin
       .from("communities")
-      .select("*")
+      .select(`
+        *,
+        members:community_members(count)
+      `)
       .order("created_at", { ascending: false })
       .limit(limit);
 
@@ -35,7 +38,12 @@ export async function GET(req: Request) {
       );
     }
 
-    return NextResponse.json({ communities }, { status: 200 });
+    const formattedCommunities = communities?.map(c => ({
+      ...c,
+      members: (c.members as any)?.[0]?.count || 0
+    }));
+
+    return NextResponse.json({ communities: formattedCommunities }, { status: 200 });
   } catch (error: any) {
     console.error("API /api/communities error:", error);
     return NextResponse.json(

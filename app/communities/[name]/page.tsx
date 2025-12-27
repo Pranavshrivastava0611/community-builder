@@ -1,6 +1,7 @@
 "use client";
 
 import CommunityChat from "@/components/CommunityChat";
+import CommunityFeed from "@/components/CommunityFeed";
 import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
 import Navbar from "@/components/Navbar";
@@ -27,7 +28,7 @@ export default function CommunityDetailPage() {
     const communityName = decodeURIComponent(params!.name as string);
     const router = useRouter();
     const { connected, publicKey } = useWallet();
-    const [activeTab, setActiveTab] = useState<"overview" | "chat">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "feed" | "chat">("overview");
 
     const [community, setCommunity] = useState<CommunityDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -168,6 +169,12 @@ export default function CommunityDetailPage() {
                                 Overview
                             </button>
                             <button
+                                onClick={() => setActiveTab("feed")}
+                                className={`pb-3 text-lg font-bold transition-colors ${activeTab === "feed" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
+                            >
+                                Feed
+                            </button>
+                            <button
                                 onClick={() => setActiveTab("chat")}
                                 className={`pb-3 text-lg font-bold transition-colors ${activeTab === "chat" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
                             >
@@ -182,6 +189,13 @@ export default function CommunityDetailPage() {
                                     {community.description}
                                 </p>
                             </GlassPanel>
+                        )}
+
+                        {activeTab === "feed" && (
+                            <CommunityFeed
+                                communityId={community.id}
+                                isMember={community.isJoined}
+                            />
                         )}
 
                         {activeTab === "chat" && (

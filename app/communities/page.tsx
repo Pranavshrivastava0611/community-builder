@@ -155,8 +155,7 @@ export default function CommunityPage() {
                             {c.name}
                           </h3>
                           <p className="text-xs font-mono text-orange-400 bg-black/50 px-2 py-1 rounded inline-block">
-                            {/* Placeholder member count logic until DB join implemented */}
-                            {(c.members || 1).toLocaleString()} members
+                            {(c.members || 0).toLocaleString()} members
                           </p>
                         </div>
                       </div>
