@@ -20,6 +20,7 @@ export default function Navbar() {
         {[
           { href: "/", label: "Home" },
           { href: "/communities", label: "Communities" },
+          { href: "/feed", label: "Feed" },
           { href: "/profile", label: "Profile" },
         ].map((link) => (
           <Link

@@ -160,7 +160,7 @@ export default function CommunityDetailPage() {
                     <div className="lg:col-span-2 space-y-8">
 
                         {/* Tabs */}
-                        <div className="flex gap-4 border-b border-white/10 pb-1">
+                        <div className="flex gap-4 border-b border-white/10 pb-1 mb-6">
                             <button
                                 onClick={() => setActiveTab("overview")}
                                 className={`pb-3 text-lg font-bold transition-colors ${activeTab === "overview" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
@@ -175,14 +175,16 @@ export default function CommunityDetailPage() {
                             </button>
                         </div>
 
-                        {activeTab === "overview" ? (
+                        {activeTab === "overview" && (
                             <GlassPanel className="p-8 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl">
                                 <h2 className="text-2xl font-bold mb-4 text-orange-100">About</h2>
                                 <p className="text-gray-300 leading-relaxed text-lg whitespace-pre-wrap">
                                     {community.description}
                                 </p>
                             </GlassPanel>
-                        ) : (
+                        )}
+
+                        {activeTab === "chat" && (
                             <CommunityChat
                                 communityId={community.id}
                                 currentWallet={publicKey?.toBase58()}

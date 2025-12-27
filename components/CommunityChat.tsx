@@ -168,7 +168,7 @@ export default function CommunityChat({ communityId, currentWallet, isMember }: 
                                     <span className={isOwn ? "text-orange-400/50" : "text-gray-500"}>
                                         {msg.user?.username || (msg.wallet ? `${msg.wallet.slice(0, 4)}...${msg.wallet.slice(-4)}` : "User")}
                                     </span>
-                                    <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    <span suppressHydrationWarning>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 </div>
                             </div>
                         </div>
