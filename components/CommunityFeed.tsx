@@ -101,11 +101,15 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
     }, [communityId]);
 
     const handlePostCreated = (newPost: any) => {
-        // Add new post to top (include user mock if response doesn't have it, but usually backend response might lack join info immediately if insert didn't return joined data)
-        // Actually backend response `post` is the row.
-        // We might want to inject current user profile or refetch.
-        // For MVP we just add it.
-        setPosts(prev => [newPost, ...prev]);
+        // Add new post to top with deduplication check
+        setPosts(prev => {
+            // Check if post already exists (might have been added via real-time)
+            if (prev.some(p => p.id === newPost.id)) {
+                console.log('Post already exists, skipping duplicate:', newPost.id);
+                return prev;
+            }
+            return [newPost, ...prev];
+        });
     };
 
     const handleLikeToggle = (postId: string, newLiked: boolean) => {
@@ -121,6 +125,11 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
         }));
     };
 
+    // Ensure unique posts before rendering (safety net)
+    const uniquePosts = posts.filter((post, index, self) =>
+        index === self.findIndex(p => p.id === post.id)
+    );
+
     if (loading) {
         return <div className="text-center py-10 text-gray-500 animate-pulse">Loading feed...</div>;
     }
@@ -130,10 +139,10 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
             <CreatePost communityId={communityId} isMember={isMember} onPostCreated={handlePostCreated} />
 
             <div className="space-y-4">
-                {posts.map(post => (
+                {uniquePosts.map(post => (
                     <FeedPost key={post.id} post={post} onLikeToggle={handleLikeToggle} />
                 ))}
-                {posts.length === 0 && (
+                {uniquePosts.length === 0 && (
                     <div className="text-center py-10 text-gray-500">
                         No posts yet. Be the first to start the conversation!
                     </div>

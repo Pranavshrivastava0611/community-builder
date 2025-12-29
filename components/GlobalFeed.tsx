@@ -334,9 +334,16 @@ export default function GlobalFeed() {
 
                     {/* Posts Section */}
                     <div className="flex flex-col gap-8">
-                        {posts.map(post => (
-                            <FeedPost key={post.id} post={post} onLikeToggle={handleLikeToggle} />
-                        ))}
+                        {(() => {
+                            // Ensure unique posts before rendering (safety net)
+                            const uniquePosts = posts.filter((post, index, self) =>
+                                index === self.findIndex(p => p.id === post.id)
+                            );
+
+                            return uniquePosts.map(post => (
+                                <FeedPost key={post.id} post={post} onLikeToggle={handleLikeToggle} />
+                            ));
+                        })()}
                         {posts.length === 0 && (
                             <div className="text-center py-40 text-gray-600">
                                 <h2 className="text-2xl font-black italic uppercase tracking-tighter">
