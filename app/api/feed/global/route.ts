@@ -5,7 +5,11 @@ import { NextResponse } from "next/server";
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
+  { 
+    auth: { autoRefreshToken: false, persistSession: false },
+    db: { schema: 'public' },
+    global: { headers: { 'x-connection-pool': 'true' } }
+  }
 );
 
 export async function GET(req: Request) {
@@ -26,41 +30,38 @@ export async function GET(req: Request) {
         } catch {}
     }
 
-    // Fetch Global Posts (Pool for trending)
-    // We fetch a larger pool (e.g. 100) ordered by Recency OR a mix. 
-    // Since we need time decay, very old posts have low score anyway.
-    // We'll fetch last 100, calculate score, sort, then return requested page.
-    // IMPORTANT: Ideally use RPC for server-side sorting. For MVP, JS Sort.
-    
-    // Pagination params for the *result* page
-    const pageSize = 20;
-
+    // OPTIMIZED: Single query with all joins - reduces round trips from N+1 to 1
     const { data: posts, error } = await supabaseAdmin
       .from("posts")
       .select(`
-        *,
-        author:profiles(username, avatar_url),
-        community:communities(name, image_url),
-        comments(count),
+        id,
+        content,
+        created_at,
+        like_count,
+        comment_count,
+        author_id,
+        community_id,
+        author:profiles!posts_author_id_fkey(username, avatar_url),
+        community:communities!posts_community_id_fkey(name, image_url),
         media(file_url)
       `)
       .order("created_at", { ascending: false })
-      .limit(100); // Pool size
+      .limit(100);
 
     if (error) {
         console.error("Global feed error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Calculate Scores & Map Data
+    if (!posts || posts.length === 0) {
+        return NextResponse.json({ posts: [] }, { status: 200 });
+    }
+
+    // Calculate Scores & Map Data (in-memory, fast)
     const scoredPosts = posts.map(p => {
         const hoursAge = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 60 * 60);
-        
-        // Handle counts from relations or columns
-        // comments relation returns [{ count: N }]
-        const commentCount = p.comments?.[0]?.count || 0;
-        const likeCount = p.like_count || 0; // Assuming like_count col or fetch similarly if table exists
-
+        const likeCount = p.like_count || 0;
+        const commentCount = p.comment_count || 0;
         const score = (likeCount * 2) + (commentCount * 3) - (hoursAge * 0.1);
         
         return { 
@@ -85,10 +86,12 @@ export async function GET(req: Request) {
     // Paginate in memory
     const pagedPosts = scoredPosts.slice(from, to + 1);
 
-    // Enrich with Likes
+    // OPTIMIZED: Batch fetch likes in ONE query instead of N queries
     let enrichedPosts = pagedPosts;
     if (currentUserId && pagedPosts.length > 0) {
         const postIds = pagedPosts.map(p => p.id);
+        
+        // Single batched query for all likes
         const { data: likes } = await supabaseAdmin
             .from("post_likes")
             .select("post_id")
@@ -107,6 +110,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ posts: enrichedPosts }, { status: 200 });
 
   } catch (error: any) {
+    console.error("Global feed API error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }

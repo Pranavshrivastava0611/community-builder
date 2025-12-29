@@ -50,7 +50,7 @@ export async function GET(
         })
       );
 
-      // 3. Resolve addresses to platform profiles
+      // 3. Resolve addresses to platform profiles & roles
       const addresses = topHoldersRaw.map(h => h.address).filter(Boolean);
       
       const { data: profiles } = await supabaseAdmin
@@ -58,9 +58,25 @@ export async function GET(
         .select("id, username, avatar_url, public_key")
         .in("public_key", addresses);
 
+      // Fetch member roles for these profiles in this community
+      const profileIds = profiles?.map(p => p.id) || [];
+      const { data: members } = await supabaseAdmin
+        .from("community_members")
+        .select("profile_id, role")
+        .eq("community_id", id)
+        .in("profile_id", profileIds);
+
+      const memberRoleMap: Record<string, string> = {};
+      members?.forEach(m => {
+        memberRoleMap[m.profile_id] = m.role;
+      });
+
       const profileMap: Record<string, any> = {};
       profiles?.forEach(p => {
-        profileMap[p.public_key] = p;
+        profileMap[p.public_key] = {
+            ...p,
+            communityRole: memberRoleMap[p.id]
+        };
       });
 
       const holders = topHoldersRaw

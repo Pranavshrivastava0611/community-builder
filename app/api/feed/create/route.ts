@@ -124,6 +124,23 @@ export async function POST(req: Request) {
         }
     }
 
+    // 6. Reputation System: Increment Karma (+10 for posting) - Silent fail if column missing
+    try {
+        const { error: rpcError } = await supabaseAdmin.rpc('increment_karma', { row_id: userId, amount: 10 });
+        if (rpcError && rpcError.code === '42703') {
+            // Column doesn't exist yet, ignore
+        } else if (rpcError) {
+            // Fallback manual update
+            const { data: currentProfile } = await supabaseAdmin.from('profiles').select('karma').eq('id', userId).maybeSingle();
+            if (currentProfile) {
+                await supabaseAdmin.from('profiles').update({ karma: (currentProfile.karma || 0) + 10 }).eq('id', userId);
+            }
+        }
+    } catch (e) {
+        // Suppress reputation errors to avoid blocking the main action
+        console.warn("Karma update skipped (likely missing column)");
+    }
+
     return NextResponse.json({ post: postData }, { status: 200 });
 
   } catch (error: any) {

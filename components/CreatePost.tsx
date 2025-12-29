@@ -69,39 +69,39 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
         }
     }, [communityId]);
 
-    // Balance Verification Logic
-    useEffect(() => {
+    async function verifyAccess() {
         if (!selectedCommunityId || !connected || !publicKey) {
             setHasToken(null);
             return;
         }
 
-        async function verifyAccess() {
-            setCheckingToken(true);
-            try {
-                // 1. Fetch community metadata (mint/pool)
-                const res = await fetch(`/api/communities/id/${selectedCommunityId}`);
-                const { community } = await res.json();
-                setCommunityMeta(community);
+        setCheckingToken(true);
+        try {
+            // 1. Fetch community metadata (mint/pool)
+            const res = await fetch(`/api/communities/id/${selectedCommunityId}`);
+            const { community } = await res.json();
+            setCommunityMeta(community);
 
-                if (community?.token_mint_address && publicKey) {
-                    const mint = new PublicKey(community.token_mint_address);
-                    const owner = publicKey as PublicKey;
-                    const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint });
+            if (community?.token_mint_address && publicKey) {
+                const mint = new PublicKey(community.token_mint_address);
+                const owner = publicKey as PublicKey;
+                const accounts = await connection.getParsedTokenAccountsByOwner(owner, { mint });
 
-                    const balance = accounts.value[0]?.account.data.parsed.info.tokenAmount.uiAmount || 0;
-                    setHasToken(balance > 0);
-                } else {
-                    setHasToken(true); // No token required for this community
-                }
-            } catch (e) {
-                console.error("Access verification failed", e);
-                setHasToken(true); // Fallback to allow posting if check fails
-            } finally {
-                setCheckingToken(false);
+                const balance = accounts.value[0]?.account.data.parsed.info.tokenAmount.uiAmount || 0;
+                setHasToken(balance > 0);
+            } else {
+                setHasToken(true); // No token required for this community
             }
+        } catch (e) {
+            console.error("Access verification failed", e);
+            setHasToken(true); // Fallback to allow posting if check fails
+        } finally {
+            setCheckingToken(false);
         }
+    }
 
+    // Balance Verification Logic
+    useEffect(() => {
         verifyAccess();
     }, [selectedCommunityId, publicKey, connected, connection]);
 
@@ -348,6 +348,7 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
                 <SwapPortal
                     isOpen={showSwap}
                     onClose={() => setShowSwap(false)}
+                    onSuccess={verifyAccess}
                     lbPairAddress={communityMeta.meteora_lb_pair_address}
                     tokenMint={communityMeta.token_mint_address}
                     tokenSymbol={communityMeta.name?.substring(0, 4).toUpperCase()}

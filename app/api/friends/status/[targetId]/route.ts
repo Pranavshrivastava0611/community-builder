@@ -26,7 +26,6 @@ export async function GET(
     const { data, error } = await supabaseAdmin
         .from("friendships")
         .select("*")
-        .or(`sender_id.eq.${userId},receiver_id.eq.${targetId}`)
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .or(`sender_id.eq.${targetId},receiver_id.eq.${targetId}`)
         .maybeSingle();
@@ -37,6 +36,14 @@ export async function GET(
     }
 
     if (!data) return NextResponse.json({ status: 'none' });
+
+    // Check if this relationship involves both users
+    const involvesUser = data.sender_id === userId || data.receiver_id === userId;
+    const involvesTarget = data.sender_id === targetId || data.receiver_id === targetId;
+    
+    if (!involvesUser || !involvesTarget) {
+        return NextResponse.json({ status: 'none' });
+    }
 
     // Determine who is who for the return
     return NextResponse.json({ 

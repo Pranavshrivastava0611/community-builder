@@ -47,30 +47,54 @@ interface UserProfile {
 export default function GlobalFeed() {
     const [posts, setPosts] = useState<Post[]>([]);
     const [feedMode, setFeedMode] = useState<'global' | 'friends'>('global');
-    const [suggestedCommunities, setSuggestedCommunities] = useState<Community[]>([]);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+    const [recommendations, setRecommendations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchFeed = async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem("authToken");
-            const headers: any = {};
-            if (token) headers["Authorization"] = `Bearer ${token}`;
-
-            const endpoint = feedMode === 'global' ? '/api/feed/global' : '/api/feed/friends';
-            const res = await fetch(endpoint, { headers });
+            const res = await fetch(`/api/feed/${feedMode}`, {
+                headers: token ? { "Authorization": `Bearer ${token}` } : {}
+            });
             const data = await res.json();
             if (data.posts) setPosts(data.posts);
-        } catch (e) {
-            console.error("Failed to load feed", e);
+        } catch (error) {
+            console.error("Fetch feed error:", error);
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchFeed();
+        async function fetchInitialData() {
+            try {
+                // Fetch communities for recommendations
+                const cRes = await fetch("/api/communities");
+                const cData = await cRes.json();
+                if (cData.communities) {
+                    setRecommendations(cData.communities.slice(0, 5));
+                }
+
+                // Fetch user profile if logged in
+                const token = localStorage.getItem("authToken");
+                if (token) {
+                    const pRes = await fetch("/api/profile", {
+                        headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    const pData = await pRes.json();
+                    if (pData.profile) setUserProfile(pData.profile);
+                }
+
+                await fetchFeed();
+            } catch (error) {
+                console.error("Initial load error:", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchInitialData();
     }, [feedMode]);
 
     // Search State
@@ -112,7 +136,7 @@ export default function GlobalFeed() {
 
                 const res = await fetch('/api/user/suggestions', { headers });
                 const data = await res.json();
-                if (data.communities) setSuggestedCommunities(data.communities);
+                if (data.communities) setRecommendations(data.communities);
             } catch (e) {
                 console.error("Failed to fetch suggestions", e);
             }
@@ -253,14 +277,6 @@ export default function GlobalFeed() {
                         <span className="hidden lg:block font-bold">Explore</span>
                     </button>
 
-                    {[
-                        { label: "Reels", icon: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z", href: "#" },
-                    ].map((item) => (
-                        <Link key={item.label} href={item.href} className="group flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white">
-                            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon} /></svg>
-                            <span className="hidden lg:block font-bold">{item.label}</span>
-                        </Link>
-                    ))}
                     <Link href="/messages" className="group flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white relative">
                         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
                         <span className="hidden lg:block font-bold">Inbox</span>
@@ -363,8 +379,8 @@ export default function GlobalFeed() {
                     <button className="text-xs font-black text-white">See All</button>
                 </div>
 
-                <div className="flex flex-col gap-5 mb-10">
-                    {suggestedCommunities.slice(0, 5).map(c => (
+                <div className="flex flex-col gap-5">
+                    {recommendations.slice(0, 3).map((c) => (
                         <div key={c.id} className="flex items-center justify-between group">
                             <Link href={`/communities/${c.name}`} className="flex items-center gap-4">
                                 <img
@@ -380,7 +396,7 @@ export default function GlobalFeed() {
                             <button className="text-xs font-black text-blue-500 hover:text-white">Follow</button>
                         </div>
                     ))}
-                    {suggestedCommunities.length === 0 && (
+                    {recommendations.length === 0 && (
                         <p className="text-xs text-gray-600 font-bold text-center py-4 italic">No new suggestions</p>
                     )}
                 </div>

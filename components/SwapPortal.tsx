@@ -3,6 +3,7 @@
 import DLMM from "@meteora-ag/dlmm";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
+//@ts-ignore
 import BN from "bn.js";
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useState } from "react";
@@ -11,6 +12,7 @@ import { toast } from "react-hot-toast";
 interface SwapPortalProps {
     isOpen: boolean;
     onClose: () => void;
+    onSuccess?: () => void;
     lbPairAddress: string;
     tokenMint: string;
     tokenSymbol?: string;
@@ -20,6 +22,7 @@ interface SwapPortalProps {
 export default function SwapPortal({
     isOpen,
     onClose,
+    onSuccess,
     lbPairAddress,
     tokenMint,
     tokenSymbol = "TOKEN",
@@ -154,6 +157,7 @@ export default function SwapPortal({
             await connection.confirmTransaction(txid, "confirmed");
 
             toast.success(`Successfully swapped for ${tokenSymbol}! Access granted.`);
+            if (onSuccess) onSuccess();
             onClose();
         } catch (e: any) {
             console.error("Swap execution failed", e);

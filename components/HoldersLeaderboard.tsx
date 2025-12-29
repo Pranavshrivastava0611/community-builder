@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { toast } from "react-hot-toast";
 import GlassPanel from "./GlassPanel";
 
 interface Holder {
@@ -11,10 +12,27 @@ interface Holder {
         id?: string;
         username: string;
         avatar_url?: string;
+        communityRole?: string;
     }
 }
 
-export default function HoldersLeaderboard({ communityId }: { communityId: string }) {
+const getTier = (amount: number) => {
+    if (amount >= 1000000) return { label: "Whale", color: "text-blue-400" };
+    if (amount >= 100000) return { label: "Shark", color: "text-red-400" };
+    if (amount >= 10000) return { label: "Dolphin", color: "text-cyan-400" };
+    if (amount >= 1000) return { label: "Crab", color: "text-orange-400" };
+    return { label: "Shrimp", color: "text-gray-500" };
+};
+
+export default function HoldersLeaderboard({
+    communityId,
+    creatorId,
+    currentUserId
+}: {
+    communityId: string;
+    creatorId?: string;
+    currentUserId?: string;
+}) {
     const [holders, setHolders] = useState<Holder[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -33,6 +51,30 @@ export default function HoldersLeaderboard({ communityId }: { communityId: strin
         fetchHolders();
     }, [communityId]);
 
+    const handlePromote = async (holderId: string) => {
+        if (!holderId) return;
+        try {
+            const token = localStorage.getItem("authToken");
+            const res = await fetch(`/api/communities/id/${communityId}/promote`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetProfileId: holderId, role: 'moderator' })
+            });
+            if (res.ok) {
+                toast.success("Alpha promoted to Moderator!");
+                // refresh...
+                const updatedRes = await fetch(`/api/communities/id/${communityId}/holders`);
+                const updatedData = await updatedRes.json();
+                if (updatedData.holders) setHolders(updatedData.holders);
+            } else {
+                const err = await res.json();
+                toast.error(err.error || "Failed to promote");
+            }
+        } catch (e) {
+            toast.error("Network error during promotion");
+        }
+    };
+
     if (loading) return (
         <GlassPanel className="p-6 rounded-2xl border border-white/10 bg-white/5 animate-pulse">
             <div className="h-4 w-32 bg-white/10 rounded mb-4" />
@@ -49,6 +91,8 @@ export default function HoldersLeaderboard({ communityId }: { communityId: strin
 
     if (holders.length === 0) return null;
 
+    const isCreator = currentUserId === creatorId;
+
     return (
         <GlassPanel className="p-6 rounded-2xl border border-white/10 bg-white/5 overflow-hidden relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-[50px] rounded-full" />
@@ -58,45 +102,67 @@ export default function HoldersLeaderboard({ communityId }: { communityId: strin
                 Top Alphas
             </h3>
 
-            <div className="space-y-4">
-                {(holders || []).map((holder, idx) => (
-                    <motion.div
-                        key={idx}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        className="flex items-center justify-between group"
-                    >
-                        <div className="flex items-center gap-3">
-                            <div className="relative">
-                                <img
-                                    src={holder.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${holder.user?.username}`}
-                                    className="w-10 h-10 rounded-full border border-white/10 object-cover"
-                                    alt=""
-                                />
-                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-black rounded-full border border-white/10 flex items-center justify-center text-[8px] font-black text-white">
-                                    {idx + 1}
+            <div className="space-y-5">
+                {(holders || []).map((holder, idx) => {
+                    const tier = getTier(holder.amount);
+                    const dbRole = holder.user?.communityRole || (idx === 0 ? "Top Holder" : "Alpha");
+                    const canPromote = isCreator && holder.user?.id && holder.user.id !== currentUserId && dbRole !== 'moderator';
+
+                    return (
+                        <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: idx * 0.1 }}
+                            className="flex items-center justify-between group"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <img
+                                        src={holder.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${holder.user?.username}`}
+                                        className="w-10 h-10 rounded-full border-2 border-white/5 object-cover"
+                                        alt=""
+                                    />
+                                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 bg-black rounded-full border border-white/10 flex items-center justify-center text-[10px] font-black ${tier.color}`}>
+                                        {tier.label[0]}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col">
+                                    <h4 className="text-sm font-black text-white group-hover:text-orange-400 transition-colors truncate max-w-[100px] flex items-center gap-1">
+                                        {holder.user?.username}
+                                        {dbRole === 'moderator' && <span className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.5)]" title="Moderator" />}
+                                    </h4>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-[8px] font-black uppercase tracking-widest ${tier.color}`}>
+                                            {tier.label}
+                                        </span>
+                                        <span className="text-[8px] text-gray-600 font-black uppercase tracking-tighter">
+                                            {dbRole}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            <div>
-                                <h4 className="text-sm font-black text-white group-hover:text-orange-400 transition-colors truncate max-w-[100px]">
-                                    {holder.user?.username}
-                                </h4>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-600">
-                                    Transmitter
-                                </p>
+                            <div className="flex flex-col items-end gap-1">
+                                <div className="text-right">
+                                    <div className="text-sm font-black text-orange-400">
+                                        {holder.amount >= 1000 ? (holder.amount / 1000).toFixed(1) + "k" : holder.amount.toLocaleString()}
+                                    </div>
+                                    <div className="text-[7px] font-black text-gray-700 uppercase tracking-tighter">
+                                        Assets
+                                    </div>
+                                </div>
+                                {canPromote && (
+                                    <button
+                                        onClick={() => handlePromote(holder.user!.id!)}
+                                        className="text-[9px] font-black text-blue-500 hover:text-white uppercase tracking-widest border border-blue-500/30 px-2 py-0.5 rounded-md hover:bg-blue-500/20 transition-all"
+                                    >
+                                        Mod+
+                                    </button>
+                                )}
                             </div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-sm font-black text-orange-400">
-                                {holder.amount.toLocaleString()}
-                            </div>
-                            <div className="text-[8px] font-black text-gray-700 uppercase tracking-tighter">
-                                Staked Assets
-                            </div>
-                        </div>
-                    </motion.div>
-                ))}
+                        </motion.div>
+                    );
+                })}
             </div>
 
             <div className="mt-6 pt-6 border-t border-white/5">

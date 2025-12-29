@@ -21,14 +21,31 @@ export async function GET(req: Request) {
 
     // Public Fetch by Username
     if (queryUsername) {
-        const { data: profile, error } = await supabaseAdmin
+        let { data: profile, error } = await supabaseAdmin
             .from('profiles')
-            .select('id, public_key, username, bio, avatar_url')
+            .select('id, public_key, username, bio, avatar_url, karma')
             .eq("username", queryUsername)
             .maybeSingle();
         
+        console.log('Profile fetch result:', { profile, error, hasKarma: profile?.karma !== undefined });
+
+        // Handle missing karma column gracefully
+        if (error && error.code === '42703') {
+            console.warn('Karma column does not exist, fetching without it');
+            const { data: retryProfile, error: retryError } = await supabaseAdmin
+                .from('profiles')
+                .select('id, public_key, username, bio, avatar_url')
+                .eq("username", queryUsername)
+                .maybeSingle();
+            if (retryError) throw retryError;
+            profile = retryProfile ? { ...retryProfile, karma: 0 } : null;
+            error = null;
+        }
+
         if (error) throw error;
         if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+        
+        console.log('Returning profile with karma:', profile.karma);
         return NextResponse.json({ profile });
     }
 
@@ -41,11 +58,23 @@ export async function GET(req: Request) {
     const decodedToken: any = jwt.verify(token, process.env.JWT_SECRET!);
     const userId = decodedToken.id;
 
-    const { data: profile, error: fetchProfileError } = await supabaseAdmin
+    let { data: profile, error: fetchProfileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, public_key, username, bio, avatar_url')
+      .select('id, public_key, username, bio, avatar_url, karma')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
+
+    // Handle missing karma column gracefully
+    if (fetchProfileError && fetchProfileError.code === '42703') {
+        const { data: retryProfile, error: retryError } = await supabaseAdmin
+            .from('profiles')
+            .select('id, public_key, username, bio, avatar_url')
+            .eq('id', userId)
+            .maybeSingle();
+        if (retryError) throw retryError;
+        profile = retryProfile ? { ...retryProfile, karma: 0 } : null;
+        fetchProfileError = null;
+    }
 
     if (fetchProfileError) throw fetchProfileError;
     return NextResponse.json({ profile }, { status: 200 });

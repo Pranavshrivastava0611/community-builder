@@ -19,11 +19,16 @@ export async function POST(req: Request) {
     const { targetUserId } = await req.json();
 
     // 1. Check if friendship already exists (either direction)
-    const { data: existing } = await supabaseAdmin
+    const { data: existing, error: fetchError } = await supabaseAdmin
         .from("friendships")
         .select("status, sender_id")
-        .or(`and(sender_id.eq.${userId},receiver_id.eq.${targetUserId}),and(sender_id.eq.${targetUserId},receiver_id.eq.${userId})`)
+        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+        .or(`sender_id.eq.${targetUserId},receiver_id.eq.${targetUserId}`)
         .maybeSingle();
+
+    if (fetchError) {
+        console.error("Existing friendship check error:", fetchError);
+    }
 
     if (existing) {
         return NextResponse.json({ status: existing.status, message: "Already exists" });

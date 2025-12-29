@@ -22,6 +22,7 @@ interface CommunityDetail {
     meteora_lb_pair_address?: string;
     members: number;
     isJoined: boolean;
+    creator_id: string;
 }
 
 export default function CommunityDetailPage() {
@@ -34,13 +35,20 @@ export default function CommunityDetailPage() {
     const [community, setCommunity] = useState<CommunityDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [joining, setJoining] = useState(false);
+    const [currentUserId, setCurrentUserId] = useState<string | undefined>();
 
     useEffect(() => {
         async function fetchData() {
             try {
                 const token = localStorage.getItem("authToken");
                 const headers: any = {};
-                if (token) headers["Authorization"] = `Bearer ${token}`;
+                if (token) {
+                    headers["Authorization"] = `Bearer ${token}`;
+                    try {
+                        const payload = JSON.parse(atob(token.split('.')[1]));
+                        setCurrentUserId(payload.id);
+                    } catch (e) { }
+                }
 
                 const res = await fetch(`/api/communities/${encodeURIComponent(communityName)}`, {
                     headers
@@ -272,7 +280,11 @@ export default function CommunityDetailPage() {
                             </div>
                         </GlassPanel>
 
-                        <HoldersLeaderboard communityId={community.id} />
+                        <HoldersLeaderboard
+                            communityId={community.id}
+                            creatorId={community.creator_id}
+                            currentUserId={currentUserId}
+                        />
                     </div>
                 </div>
 

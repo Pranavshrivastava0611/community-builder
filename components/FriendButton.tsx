@@ -116,7 +116,7 @@ export default function FriendButton({ targetUserId }: FriendButtonProps) {
                 </button>
                 <div className="bg-white/5 border border-white/10 px-6 py-2 rounded-full font-black text-xs uppercase tracking-widest text-green-500 flex items-center gap-2">
                     <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                    Friends
+                    Already Friend
                 </div>
             </div>
         );
