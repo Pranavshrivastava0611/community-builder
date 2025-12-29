@@ -4,6 +4,7 @@ import CommunityChat from "@/components/CommunityChat";
 import CommunityFeed from "@/components/CommunityFeed";
 import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
+import HoldersLeaderboard from "@/components/HoldersLeaderboard";
 import Navbar from "@/components/Navbar";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { motion } from "framer-motion";
@@ -270,6 +271,8 @@ export default function CommunityDetailPage() {
                                 </div>
                             </div>
                         </GlassPanel>
+
+                        <HoldersLeaderboard communityId={community.id} />
                     </div>
                 </div>
 
