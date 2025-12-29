@@ -15,11 +15,10 @@ const supabaseAdmin = createClient(
 
 export async function GET(
   req: Request,
-  { params }: { params: { name: string } }
+  { params }: { params: Promise<{ name: string }> }
 ) {
   try {
-    const param = await params;
-    const name = param.name;
+    const {name} = await params;
     const names = decodeURIComponent(name);
     console.log(`🔍 API: Fetching community by name. Raw: '${name}', Decoded: '${names}'`);
 
