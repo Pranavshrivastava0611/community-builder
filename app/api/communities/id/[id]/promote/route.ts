@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,12 +9,12 @@ const supabaseAdmin = createClient(
 );
 
 export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: communityId } = await params;
-    const authHeader = req.headers.get("Authorization");
+    const { id: communityId } = await context.params;
+    const authHeader = request.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     
     const token = authHeader.split(" ")[1];
@@ -33,7 +33,7 @@ export async function POST(
     }
 
     // 2. Extract target profile and new role
-    const { targetProfileId, role = 'moderator' } = await req.json();
+    const { targetProfileId, role = 'moderator' } = await request.json();
 
     // 3. Update the member's role
     const { error: updateError } = await supabaseAdmin

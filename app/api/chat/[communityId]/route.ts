@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,10 +13,10 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ communityId: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ communityId: string }> }
 ) {
-  const { communityId } = await params;
+  const { communityId } = await context.params;
   try {
 
     // Fetch last 50 messages

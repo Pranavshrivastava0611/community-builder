@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,11 +14,11 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ name: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ name: string }> }
 ) {
   try {
-    const {name} = await params;
+    const { name } = await context.params;
     const names = decodeURIComponent(name);
     console.log(`🔍 API: Fetching community by name. Raw: '${name}', Decoded: '${names}'`);
 
@@ -44,7 +44,7 @@ export async function GET(
 
     // 3. Check if current user is member (Optimistic check via Auth header)
     let isJoined = false;
-    const authorizationHeader = req.headers.get("Authorization");
+    const authorizationHeader = request.headers.get("Authorization");
     if (authorizationHeader && authorizationHeader.startsWith("Bearer ") && process.env.JWT_SECRET) {
         try {
             const token = authorizationHeader.split(" ")[1];

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,13 +9,13 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ conversationId: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ conversationId: string }> }
 ) {
   try {
-    const { conversationId } = await params;
+    const { conversationId } = await context.params;
     
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = request.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const token = authHeader.split(" ")[1];
     const decoded: any = jwt.verify(token, process.env.JWT_SECRET!);

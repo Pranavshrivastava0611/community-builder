@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,12 +9,12 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ targetId: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ targetId: string }> }
 ) {
   try {
-    const { targetId } = await params;
-    const authHeader = req.headers.get("Authorization");
+    const { targetId } = await context.params;
+    const authHeader = request.headers.get("Authorization");
     const token = authHeader?.split(" ")[1];
     if (!token) return NextResponse.json({ mutualFriends: [], totalCount: 0 });
     

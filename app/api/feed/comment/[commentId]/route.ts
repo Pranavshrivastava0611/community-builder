@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,10 +8,13 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ commentId: string }> }) {
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ commentId: string }> }
+) {
   try {
-    const { commentId } = await params;
-    const authHeader = req.headers.get("Authorization");
+    const { commentId } = await context.params;
+    const authHeader = request.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const token = authHeader.split(" ")[1];
     
@@ -25,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ commen
         return NextResponse.json({ error: "Invalid Token" }, { status: 401 });
     }
 
-    const { content } = await req.json();
+    const { content } = await request.json();
     if (!content?.trim()) return NextResponse.json({ error: "Content required" }, { status: 400 });
 
     // Verify ownership
@@ -53,10 +56,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ commen
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ commentId: string }> }) {
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ commentId: string }> }
+) {
   try {
-    const { commentId } = await params;
-    const authHeader = req.headers.get("Authorization");
+    const { commentId } = await context.params;
+    const authHeader = request.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const token = authHeader.split(" ")[1];
     

@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import jwt from "jsonwebtoken";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,12 +11,12 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ communityId: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ communityId: string }> }
 ) {
   try {
-    const { communityId } = await params;
-    const { searchParams } = new URL(req.url);
+    const { communityId } = await context.params;
+    const { searchParams } = new URL(request.url);
     const limit = 20;
     const page = parseInt(searchParams.get("page") || "0");
     const from = page * limit;
@@ -24,7 +24,7 @@ export async function GET(
 
     // 1. Get User ID (Optional) for "isLiked" check
     let currentUserId: string | null = null;
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = request.headers.get("Authorization");
     if (authHeader?.startsWith("Bearer ") && process.env.JWT_SECRET) {
         try {
             const token = authHeader.split(" ")[1];

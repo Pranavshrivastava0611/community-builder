@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,11 +8,11 @@ const supabaseAdmin = createClient(
 );
 
 export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ postId: string }> }
+  request: NextRequest,
+  context: { params: Promise<{ postId: string }> }
 ) {
   try {
-    const { postId } = await params;
+    const { postId } = await context.params;
     const { data: comments, error } = await supabaseAdmin
       .from("comments")
       .select(`
