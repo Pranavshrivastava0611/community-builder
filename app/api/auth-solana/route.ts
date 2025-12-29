@@ -80,9 +80,15 @@ export async function POST(req: Request) {
 
     let profileData = existingProfile;
     if (!profileData) {
+      const adjectives = ["Fast", "Vibrant", "Neon", "Silent", "Quantum", "Hidden", "Solar", "Glitch", "Infinite", "Cyber", "Brave", "Wandering"];
+      const nouns = ["Phoenix", "Voyager", "Matrix", "Knight", "Aura", "Nova", "Nomad", "Pixel", "Citizen", "Oracle", "Phantom", "Pulse"];
+      const randomAdj = adjectives[Math.floor(Math.random() * adjectives.length)];
+      const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
+      const randomNum = Math.floor(1000 + Math.random() * 9000); // 4-digit number
+      
       const newProfileId = (globalThis as any).crypto?.randomUUID?.() || String(Date.now());
-      const defaultUsername = `user_${String(publicKey).substring(0, 6)}`;
-      const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${publicKey}`;
+      const defaultUsername = `${randomAdj}-${randomNoun}-${randomNum}`;
+      const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${defaultUsername}`;
 
       const { data: createdProfile, error: insertProfileError } = await supabaseAdmin
         .from('profiles')

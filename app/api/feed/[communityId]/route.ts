@@ -38,11 +38,17 @@ export async function GET(
       .from("posts")
       .select(`
         *,
-        author:profiles(username, avatar_url),
+        author:profiles(
+            id, 
+            username, 
+            avatar_url,
+            roles:community_members(role)
+        ),
         comments(count),
         media(file_url)
       `)
       .eq("community_id", communityId)
+      .eq("author.roles.community_id", communityId)
       .order("created_at", { ascending: false })
       .range(from, to);
 

@@ -3,9 +3,12 @@
 import { supabase } from "@/utils/supabase";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import FeedPost from "./FeedPost";
+import NotificationsPopover from "./NotificationsPopover";
 
 interface Post {
     id: string;
@@ -35,6 +38,7 @@ interface Community {
 }
 
 interface UserProfile {
+    id: string;
     username: string;
     avatar_url?: string;
     public_key: string;
@@ -42,12 +46,38 @@ interface UserProfile {
 
 export default function GlobalFeed() {
     const [posts, setPosts] = useState<Post[]>([]);
+    const [feedMode, setFeedMode] = useState<'global' | 'friends'>('global');
     const [suggestedCommunities, setSuggestedCommunities] = useState<Community[]>([]);
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [loading, setLoading] = useState(true);
 
+    const fetchFeed = async () => {
+        setLoading(true);
+        try {
+            const token = localStorage.getItem("authToken");
+            const headers: any = {};
+            if (token) headers["Authorization"] = `Bearer ${token}`;
+
+            const endpoint = feedMode === 'global' ? '/api/feed/global' : '/api/feed/friends';
+            const res = await fetch(endpoint, { headers });
+            const data = await res.json();
+            if (data.posts) setPosts(data.posts);
+        } catch (e) {
+            console.error("Failed to load feed", e);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchFeed();
+    }, [feedMode]);
+
     // Search State
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+    const [unreadNotifications, setUnreadNotifications] = useState(0);
+    const [unreadMessages, setUnreadMessages] = useState(0);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<Community[]>([]);
     const [isSearching, setIsSearching] = useState(false);
@@ -56,22 +86,24 @@ export default function GlobalFeed() {
     const { setVisible } = useWalletModal();
 
     useEffect(() => {
-        async function fetchFeed() {
+        async function fetchCounts() {
             try {
                 const token = localStorage.getItem("authToken");
-                const headers: any = {};
-                if (token) headers["Authorization"] = `Bearer ${token}`;
+                if (!token) return;
 
-                const res = await fetch(`/api/feed/global`, { headers });
-                const data = await res.json();
-                if (data.posts) setPosts(data.posts);
-            } catch (e) {
-                console.error("Failed to load global feed", e);
-            } finally {
-                setLoading(false);
-            }
+                // Fetch unread notifications
+                const nRes = await fetch("/api/notifications", { headers: { "Authorization": `Bearer ${token}` } });
+                const nData = await nRes.json();
+                setUnreadNotifications(nData.notifications?.filter((n: any) => !n.is_read).length || 0);
+
+                // Fetch unread messages
+                const mRes = await fetch("/api/messages/conversations", { headers: { "Authorization": `Bearer ${token}` } });
+                const mData = await mRes.json();
+                // For MVP we just check if any conversation has unread (simplified)
+                setUnreadMessages(0); // placeholder for more complex logic
+            } catch (e) { }
         }
-
+        fetchCounts();
         async function fetchSuggestions() {
             try {
                 const token = localStorage.getItem("authToken");
@@ -100,7 +132,6 @@ export default function GlobalFeed() {
             }
         }
 
-        fetchFeed();
         fetchSuggestions();
         fetchProfile();
 
@@ -137,6 +168,31 @@ export default function GlobalFeed() {
 
         return () => { supabase.removeChannel(channel); };
     }, []);
+
+    useEffect(() => {
+        if (!userProfile?.id) return;
+
+        const channel = supabase
+            .channel(`user-specific-${userProfile.id}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications',
+                filter: `user_id=eq.${userProfile.id}`
+            }, () => {
+                setUnreadNotifications(prev => prev + 1);
+                toast.success("New activity received!", {
+                    style: {
+                        background: '#000',
+                        color: '#fff',
+                        border: '1px solid #333'
+                    }
+                });
+            })
+            .subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [userProfile?.id]);
 
     // Search Logic
     useEffect(() => {
@@ -199,15 +255,28 @@ export default function GlobalFeed() {
 
                     {[
                         { label: "Reels", icon: "M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z", href: "#" },
-                        { label: "Messages", icon: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z", href: "#" },
-                        { label: "Notifications", icon: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z", href: "#" },
-                        { label: "Create", icon: "M12 4v16m8-8H4", href: "/communities" },
                     ].map((item) => (
                         <Link key={item.label} href={item.href} className="group flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white">
                             <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon} /></svg>
                             <span className="hidden lg:block font-bold">{item.label}</span>
                         </Link>
                     ))}
+                    <Link href="/messages" className="group flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white relative">
+                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+                        <span className="hidden lg:block font-bold">Inbox</span>
+                        {unreadMessages > 0 && <span className="absolute top-2 left-8 w-2 h-2 bg-orange-500 rounded-full" />}
+                    </Link>
+
+                    <button onClick={() => { setIsNotificationsOpen(true); setUnreadNotifications(0); }} className="group flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white relative">
+                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                        <span className="hidden lg:block font-bold">Notifications</span>
+                        {unreadNotifications > 0 && <span className="absolute top-2 left-8 w-2.5 h-2.5 bg-orange-600 rounded-full border-2 border-black animate-pulse" />}
+                    </button>
+
+                    <Link href="/communities" className="group flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-all text-gray-400 hover:text-white">
+                        <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                        <span className="hidden lg:block font-bold">Create</span>
+                    </Link>
                 </nav>
 
                 <div className="mt-auto mb-6 w-full">
@@ -228,7 +297,25 @@ export default function GlobalFeed() {
 
             {/* Middle Content */}
             <div className="flex-1 flex flex-col items-center">
-                <main className="w-full max-w-[630px] pt-12">
+                <main className="w-full max-w-[630px] pt-8">
+                    {/* Feed Tabs */}
+                    <div className="flex items-center justify-center border-b border-white/5 mb-10 sticky top-0 bg-black/80 backdrop-blur-xl z-30">
+                        <button
+                            onClick={() => setFeedMode('global')}
+                            className={`px-10 py-4 text-xs font-black uppercase tracking-widest transition-all relative ${feedMode === 'global' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        >
+                            For You
+                            {feedMode === 'global' && <motion.div layoutId="feedTab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-orange-500" />}
+                        </button>
+                        <button
+                            onClick={() => setFeedMode('friends')}
+                            className={`px-10 py-4 text-xs font-black uppercase tracking-widest transition-all relative ${feedMode === 'friends' ? 'text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                        >
+                            Friends
+                            {feedMode === 'friends' && <motion.div layoutId="feedTab" className="absolute bottom-0 left-0 right-0 h-[2px] bg-orange-500" />}
+                        </button>
+                    </div>
+
                     {/* Posts Section */}
                     <div className="flex flex-col gap-8">
                         {posts.map(post => (
@@ -236,8 +323,14 @@ export default function GlobalFeed() {
                         ))}
                         {posts.length === 0 && (
                             <div className="text-center py-40 text-gray-600">
-                                <h2 className="text-2xl font-black italic">Nothing Here Yet</h2>
-                                <p className="text-sm">Join communities on the right to start seeing posts.</p>
+                                <h2 className="text-2xl font-black italic uppercase tracking-tighter">
+                                    {feedMode === 'global' ? "Nothing Here Yet" : "Your Circle is Quiet"}
+                                </h2>
+                                <p className="text-xs font-medium mt-2 max-w-[280px] mx-auto leading-relaxed">
+                                    {feedMode === 'global'
+                                        ? "Join communities on the right to start seeing the latest on-chain activity."
+                                        : "Add friends to see their private updates and shared content."}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -351,6 +444,12 @@ export default function GlobalFeed() {
                     </div>
                 </div>
             )}
+
+            <AnimatePresence>
+                {isNotificationsOpen && (
+                    <NotificationsPopover onClose={() => setIsNotificationsOpen(false)} />
+                )}
+            </AnimatePresence>
         </div>
     );
 }

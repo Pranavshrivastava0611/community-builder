@@ -70,17 +70,36 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ comme
         return NextResponse.json({ error: "Invalid Token" }, { status: 401 });
     }
 
-    // Verify ownership
+    // 1. Fetch comment and parent post's community info
     const { data: comment, error: fetchError } = await supabaseAdmin
         .from("comments")
-        .select("author_id")
+        .select("author_id, posts(community_id)")
         .eq("id", commentId)
         .single();
     
     if (fetchError || !comment) return NextResponse.json({ error: "Comment not found" }, { status: 404 });
-    if (comment.author_id !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    // Delete
+    // 2. Authorization Check
+    let isAuthorized = comment.author_id === userId;
+
+    if (!isAuthorized && comment.posts) {
+        // Check if user is leader/moderator of THIS community
+        const communityId = (comment.posts as any).community_id;
+        const { data: member } = await supabaseAdmin
+            .from("community_members")
+            .select("role")
+            .eq("community_id", communityId)
+            .eq("profile_id", userId)
+            .single();
+        
+        if (member && (member.role === 'leader' || member.role === 'moderator')) {
+            isAuthorized = true;
+        }
+    }
+
+    if (!isAuthorized) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    // 3. Delete
     const { error: deleteError } = await supabaseAdmin
         .from("comments")
         .delete()

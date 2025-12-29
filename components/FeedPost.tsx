@@ -17,8 +17,10 @@ interface Post {
     comment_count: number;
     isLiked: boolean;
     user?: {
+        id?: string;
         username?: string;
         avatar_url?: string;
+        roles?: { role: string }[];
     };
     community?: {
         name: string;
@@ -50,6 +52,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
 
     // Management States
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+    const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
     const [isEditingPost, setIsEditingPost] = useState(false);
     const [editPostContent, setEditPostContent] = useState(post.content);
     const [showOptions, setShowOptions] = useState(false);
@@ -61,9 +64,21 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
             try {
                 const payload = JSON.parse(atob(token.split('.')[1]));
                 setCurrentUserId(payload.id);
+
+                // Fetch current user's role in this community
+                const fetchRole = async () => {
+                    const { data } = await supabase
+                        .from('community_members')
+                        .select('role')
+                        .eq('community_id', post.community_id)
+                        .eq('profile_id', payload.id)
+                        .maybeSingle();
+                    if (data) setCurrentUserRole(data.role);
+                };
+                fetchRole();
             } catch (e) { }
         }
-    }, []);
+    }, [post.community_id]);
 
     useEffect(() => {
         const channel = supabase
@@ -247,7 +262,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
             {/* Header */}
             <div className="flex items-center justify-between px-2 mb-3">
                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-400 to-rose-500 p-[1.5px]">
+                    <Link href={`/profile/${post.user?.username}`} className="w-8 h-8 rounded-full bg-gradient-to-tr from-orange-400 to-rose-500 p-[1.5px] cursor-pointer">
                         <div className="w-full h-full rounded-full bg-black border border-black overflow-hidden relative">
                             <img
                                 src={post.user?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user?.username || post.user_id}`}
@@ -255,9 +270,17 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                                 className="w-full h-full object-cover"
                             />
                         </div>
-                    </div>
+                    </Link>
                     <div className="flex items-center gap-2">
-                        <span className="text-sm font-black text-white hover:text-gray-400 cursor-pointer">{post.user?.username || "anonymous"}</span>
+                        <Link href={`/profile/${post.user?.username}`} className="text-sm font-black text-white hover:text-orange-500 transition-colors cursor-pointer flex items-center gap-1.5">
+                            {post.user?.username || "anonymous"}
+                            {post.user?.roles?.[0]?.role && (post.user.roles[0].role === 'leader' || post.user.roles[0].role === 'moderator') && (
+                                <span className="bg-orange-500 text-[8px] font-black uppercase tracking-widest text-black px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                                    {post.user.roles[0].role}
+                                </span>
+                            )}
+                        </Link>
                         <span className="text-gray-500 text-sm">•</span>
                         <span className="text-gray-500 text-sm font-medium">{timeSince(post.created_at)}</span>
                     </div>
@@ -276,11 +299,11 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                                 exit={{ opacity: 0, scale: 0.95, y: -10 }}
                                 className="absolute right-0 top-10 w-40 bg-[#121212] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
                             >
-                                {currentUserId === post.user_id ? (
-                                    <>
-                                        <button onClick={() => { setIsEditingPost(true); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-white hover:bg-white/5 font-bold">Edit Post</button>
-                                        <button onClick={() => { setItemToDelete({ type: 'post', id: post.id }); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-white/5 font-bold border-t border-white/5">Delete</button>
-                                    </>
+                                {currentUserId === post.user_id && (
+                                    <button onClick={() => { setIsEditingPost(true); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-xs text-white hover:bg-white/5 font-bold border-b border-white/5">Edit Post</button>
+                                )}
+                                {(currentUserId === post.user_id || currentUserRole === 'leader' || currentUserRole === 'moderator') ? (
+                                    <button onClick={() => { setItemToDelete({ type: 'post', id: post.id }); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-xs text-red-500 hover:bg-red-500/10 font-black uppercase tracking-widest">Delete</button>
                                 ) : (
                                     <button onClick={() => { toast.success("Reported"); setShowOptions(false); }} className="w-full text-left px-4 py-3 text-sm text-white hover:bg-white/5 font-bold">Report</button>
                                 )}
@@ -385,7 +408,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                                         <span className="font-black text-white whitespace-nowrap">{c.author?.username || "user"}</span>
                                         <span className="text-gray-300">{c.content}</span>
                                     </div>
-                                    {(currentUserId === c.author_id) && (
+                                    {(currentUserId === c.author_id || currentUserRole === 'leader' || currentUserRole === 'moderator') && (
                                         <button onClick={() => setItemToDelete({ type: 'comment', id: c.id })} className="text-gray-600 hover:text-red-500 text-xs font-bold uppercase tracking-tighter transition-colors">Delete</button>
                                     )}
                                 </div>

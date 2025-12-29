@@ -70,17 +70,35 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ postI
         return NextResponse.json({ error: "Invalid Token" }, { status: 401 });
     }
 
-    // Verify ownership
+    // 1. Fetch post and community info
     const { data: post, error: fetchError } = await supabaseAdmin
         .from("posts")
-        .select("author_id")
+        .select("author_id, community_id")
         .eq("id", postId)
         .single();
     
     if (fetchError || !post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
-    if (post.author_id !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    // Delete
+    // 2. Authorization Check
+    let isAuthorized = post.author_id === userId;
+
+    if (!isAuthorized) {
+        // Check if user is leader/moderator of THIS community
+        const { data: member } = await supabaseAdmin
+            .from("community_members")
+            .select("role")
+            .eq("community_id", post.community_id)
+            .eq("profile_id", userId)
+            .single();
+        
+        if (member && (member.role === 'leader' || member.role === 'moderator')) {
+            isAuthorized = true;
+        }
+    }
+
+    if (!isAuthorized) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    // 3. Delete
     const { error: deleteError } = await supabaseAdmin
         .from("posts")
         .delete()

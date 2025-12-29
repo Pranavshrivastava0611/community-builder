@@ -46,9 +46,20 @@ export async function POST(req: Request) {
     } else {
         // LIKE
         await supabaseAdmin.from("post_likes").insert({ post_id: postId, user_id: userId });
-        const { data: post } = await supabaseAdmin.from("posts").select("like_count").eq("id", postId).single();
+        const { data: post } = await supabaseAdmin.from("posts").select("like_count, author_id").eq("id", postId).single();
         if (post) {
              await supabaseAdmin.from("posts").update({ like_count: post.like_count + 1 }).eq("id", postId);
+             
+             // NOTIFICATION
+             if (post.author_id !== userId) {
+                await supabaseAdmin.from("notifications").insert({
+                    user_id: post.author_id,
+                    type: 'like',
+                    actor_id: userId,
+                    target_id: postId,
+                    is_read: false
+                });
+             }
         }
         return NextResponse.json({ liked: true });
     }

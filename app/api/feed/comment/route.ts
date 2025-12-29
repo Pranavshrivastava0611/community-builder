@@ -39,7 +39,17 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Failed" }, { status: 500 });
     }
 
-    // Legacy increment logic removed as 'comment_count' column does not exist on 'posts'
+    // NOTIFICATION logic
+    const { data: post } = await supabaseAdmin.from("posts").select("author_id").eq("id", postId).single();
+    if (post && post.author_id !== userId) {
+        await supabaseAdmin.from("notifications").insert({
+            user_id: post.author_id,
+            type: 'comment',
+            actor_id: userId,
+            target_id: postId,
+            is_read: false
+        });
+    }
 
     return NextResponse.json({ comment }, { status: 200 });
 
