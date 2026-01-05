@@ -30,9 +30,10 @@ export default function LiveStreamingRoom({
     streamStatus
 }: LiveStreamingRoomProps) {
     const [isSuperchatOpen, setIsSuperchatOpen] = useState(false);
-    console.log("LiveStreamingRoom: recipientWallet =", recipientWallet);
+    const [wantsToStream, setWantsToStream] = useState(false);
 
-    const isActuallyLive = streamStatus === 'live' || isBroadcaster;
+    const isActuallyLive = streamStatus === 'live' || isBroadcaster || wantsToStream;
+    const canInitiateStream = isMember && streamStatus === 'idle';
 
     return (
         <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row gap-4 h-full min-h-[80vh]">
@@ -40,7 +41,7 @@ export default function LiveStreamingRoom({
             <div className="flex-1 flex flex-col gap-4">
                 {/* Video Container */}
                 <div className="relative aspect-video bg-black rounded-xl overflow-hidden border border-white/5 shadow-2xl group">
-                    {isBroadcaster ? (
+                    {(isBroadcaster || wantsToStream) ? (
                         <BroadcasterDashboard
                             room={community.id}
                             username={currentWallet || "broadcaster"}
@@ -58,6 +59,15 @@ export default function LiveStreamingRoom({
                             <div className="text-center">
                                 <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest">Station Offline</h3>
                                 <p className="text-[10px] text-gray-600 font-bold uppercase tracking-widest mt-1">Awaiting incoming signals</p>
+
+                                {canInitiateStream && (
+                                    <GlowButton
+                                        onClick={() => setWantsToStream(true)}
+                                        className="mt-6 px-8 py-3 text-[10px]"
+                                    >
+                                        Establish Link
+                                    </GlowButton>
+                                )}
                             </div>
                         </div>
                     )}

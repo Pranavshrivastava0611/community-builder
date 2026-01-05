@@ -5,11 +5,12 @@ import CommunityFeed from "@/components/CommunityFeed";
 import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
 import HoldersLeaderboard from "@/components/HoldersLeaderboard";
-import LiveStreamingRoom from "@/components/LiveStreamingRoom";
 import Navbar from "@/components/Navbar";
 import { supabase } from "@/utils/supabase";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { motion } from "framer-motion";
+import { SignalHigh } from "lucide-react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
@@ -285,16 +286,43 @@ export default function CommunityDetailPage() {
                         )}
 
                         {activeTab === "live" && (
-                            <LiveStreamingRoom
-                                community={community}
-                                isBroadcaster={currentUserId === community.creator_id}
-                                currentWallet={publicKey?.toBase58()}
-                                recipientWallet={creatorWallet}
-                                isMember={community.isJoined}
-                                streamStatus={streamStatus}
-                                tokenMintAddress={community.token_mint_address}
-                                tokenSymbol={community.token_symbol}
-                            />
+                            <div className="py-12 flex flex-col items-center justify-center border border-white/10 rounded-[40px] bg-gradient-to-b from-orange-500/5 to-transparent backdrop-blur-sm relative overflow-hidden">
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-orange-500/20 rounded-full blur-[80px] -z-10" />
+
+                                <div className="w-20 h-20 rounded-full bg-black border border-orange-500/50 flex items-center justify-center mb-6 relative">
+                                    <SignalHigh size={32} className="text-orange-500" />
+                                    {streamStatus === 'live' && (
+                                        <div className="absolute -top-1 -right-1 flex h-4 w-4">
+                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-600"></span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <h2 className="text-3xl font-black uppercase tracking-tighter mb-2">
+                                    {streamStatus === 'live' ? "Signal Detected" : "Channel Interface"}
+                                </h2>
+                                <p className="text-gray-500 text-sm font-bold uppercase tracking-widest mb-8">
+                                    {streamStatus === 'live' ? "High-priority transmission in progress" : "Station currently on standby"}
+                                </p>
+
+                                <Link href={`/communities/${encodeURIComponent(community.name)}/live`}>
+                                    <GlowButton className="px-10 py-4 text-sm">
+                                        {streamStatus === 'live' ? "Join Transmission" : "Enter Control Center"}
+                                    </GlowButton>
+                                </Link>
+
+                                <div className="mt-12 grid grid-cols-2 gap-8 text-center bg-black/40 p-6 rounded-2xl border border-white/5">
+                                    <div>
+                                        <div className="text-white font-black text-xl uppercase">Neural</div>
+                                        <div className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Chat Link</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-white font-black text-xl uppercase">SOL</div>
+                                        <div className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">Superchat</div>
+                                    </div>
+                                </div>
+                            </div>
                         )}
 
                         {activeTab !== "live" && (

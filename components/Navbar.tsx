@@ -7,6 +7,7 @@ export default function Navbar() {
 
   const links = [
     { href: "/", label: "Home" },
+    { href: "/live", label: "Live Hub" },
     { href: "/communities", label: "Communities" },
     { href: "/feed", label: "Feed" },
     { href: "/profile", label: "Profile" },
