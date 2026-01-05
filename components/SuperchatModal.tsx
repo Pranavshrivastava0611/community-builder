@@ -1,11 +1,18 @@
 "use client";
 
+import {
+    createAssociatedTokenAccountInstruction,
+    createTransferInstruction,
+    getAccount,
+    getAssociatedTokenAddress,
+    getMint
+} from "@solana/spl-token";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
     LAMPORTS_PER_SOL,
     PublicKey,
     SystemProgram,
-    Transaction
+    Transaction,
 } from "@solana/web3.js";
 import { AnimatePresence, motion } from "framer-motion";
 import { useState } from "react";
@@ -17,16 +24,27 @@ interface SuperchatModalProps {
     onClose: () => void;
     communityId: string;
     recipientWallet: string;
+    tokenMintAddress?: string;
+    tokenSymbol?: string;
 }
 
-export default function SuperchatModal({ isOpen, onClose, communityId, recipientWallet }: SuperchatModalProps) {
+export default function SuperchatModal({
+    isOpen,
+    onClose,
+    communityId,
+    recipientWallet,
+    tokenMintAddress,
+    tokenSymbol = "TOKEN"
+}: SuperchatModalProps) {
     const [amount, setAmount] = useState<string>("0.1");
     const [message, setMessage] = useState("");
+    const [currency, setCurrency] = useState<"SOL" | "TOKEN">("SOL");
     const [loading, setLoading] = useState(false);
     const { connection } = useConnection();
     const { publicKey, sendTransaction } = useWallet();
 
     const handleSend = async () => {
+        console.log("SuperchatModal: handleSend triggered with recipientWallet =", recipientWallet);
         if (!publicKey) {
             toast.error("Please connect your wallet");
             return;
@@ -34,17 +52,78 @@ export default function SuperchatModal({ isOpen, onClose, communityId, recipient
 
         try {
             setLoading(true);
-            const transaction = new Transaction().add(
-                SystemProgram.transfer({
-                    fromPubkey: publicKey,
-                    toPubkey: new PublicKey(recipientWallet),
-                    lamports: parseFloat(amount) * LAMPORTS_PER_SOL,
-                })
-            );
+
+            if (!recipientWallet) {
+                toast.error("Recipient address is missing");
+                setLoading(false);
+                return;
+            }
+
+            let recipientPubkey: PublicKey;
+            try {
+                recipientPubkey = new PublicKey(recipientWallet);
+            } catch (err) {
+                toast.error("Invalid recipient address");
+                setLoading(false);
+                return;
+            }
+
+            const transaction = new Transaction();
+
+            if (currency === "SOL") {
+                transaction.add(
+                    SystemProgram.transfer({
+                        fromPubkey: publicKey,
+                        toPubkey: recipientPubkey,
+                        lamports: parseFloat(amount) * LAMPORTS_PER_SOL,
+                    })
+                );
+            } else if (tokenMintAddress) {
+                let mintPubkey: PublicKey;
+                try {
+                    mintPubkey = new PublicKey(tokenMintAddress);
+                } catch (err) {
+                    toast.error("Invalid token mint address");
+                    setLoading(false);
+                    return;
+                }
+
+                const fromAta = await getAssociatedTokenAddress(mintPubkey, publicKey);
+                const toAta = await getAssociatedTokenAddress(mintPubkey, recipientPubkey);
+
+                try {
+                    await getAccount(connection, toAta);
+                } catch (e) {
+                    transaction.add(
+                        createAssociatedTokenAccountInstruction(
+                            publicKey,
+                            toAta,
+                            recipientPubkey,
+                            mintPubkey
+                        )
+                    );
+                }
+
+                const mintInfo = await getMint(connection, mintPubkey);
+                const decimals = mintInfo.decimals;
+                const adjustedAmount = BigInt(Math.floor(parseFloat(amount) * Math.pow(10, decimals)));
+
+                transaction.add(
+                    createTransferInstruction(
+                        fromAta,
+                        toAta,
+                        publicKey,
+                        adjustedAmount
+                    )
+                );
+            } else {
+                toast.error("This community does not have a native token yet.");
+                setLoading(false);
+                return;
+            }
 
             const signature = await sendTransaction(transaction, connection);
 
-            // Send to backend after confirmation
             const token = localStorage.getItem("authToken");
             const res = await fetch("/api/chat/send", {
                 method: "POST",
@@ -54,10 +133,11 @@ export default function SuperchatModal({ isOpen, onClose, communityId, recipient
                 },
                 body: JSON.stringify({
                     communityId,
-                    messages: [message || `Sent ${amount} SOL Superchat!`],
+                    messages: [message || `Sent ${amount} ${currency === 'SOL' ? 'SOL' : tokenSymbol} Superchat!`],
                     type: "text",
                     is_superchat: true,
                     superchat_amount: parseFloat(amount),
+                    token_symbol: currency === "SOL" ? "SOL" : tokenSymbol,
                     tx_signature: signature
                 })
             });
@@ -104,16 +184,31 @@ export default function SuperchatModal({ isOpen, onClose, communityId, recipient
                         </div>
 
                         <div className="space-y-6">
+                            <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+                                <button
+                                    onClick={() => setCurrency("SOL")}
+                                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${currency === "SOL" ? "bg-white/10 text-white" : "text-gray-500"}`}
+                                >
+                                    SOL
+                                </button>
+                                <button
+                                    onClick={() => setCurrency("TOKEN")}
+                                    className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${currency === "TOKEN" ? "bg-white/10 text-white" : "text-gray-500"}`}
+                                >
+                                    {tokenSymbol}
+                                </button>
+                            </div>
+
                             <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-2">Select Amount (SOL)</label>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 block mb-2">Select Amount ({currency === 'SOL' ? 'SOL' : tokenSymbol})</label>
                                 <div className="grid grid-cols-3 gap-2">
-                                    {["0.1", "0.5", "1.0", "5.0", "10.0", "25.0"].map((v) => (
+                                    {(currency === "SOL" ? ["0.1", "0.5", "1.0", "5.0", "10.0", "25.0"] : ["100", "500", "1000", "5000", "10000", "50000"]).map((v) => (
                                         <button
                                             key={v}
                                             onClick={() => setAmount(v)}
                                             className={`py-3 rounded-xl border font-bold text-sm transition-all ${amount === v
-                                                    ? "bg-yellow-500 text-black border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)]"
-                                                    : "bg-white/5 text-gray-400 border-white/10 hover:border-white/20"
+                                                ? "bg-yellow-500 text-black border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+                                                : "bg-white/5 text-gray-400 border-white/10 hover:border-white/20"
                                                 }`}
                                         >
                                             {v}
@@ -137,7 +232,7 @@ export default function SuperchatModal({ isOpen, onClose, communityId, recipient
                                 disabled={loading}
                                 className="w-full py-4 text-sm bg-yellow-500 border-yellow-400"
                             >
-                                {loading ? "Transmitting..." : `Amplify Signal for ${amount} SOL`}
+                                {loading ? "Transmitting..." : `Amplify Signal for ${amount} ${currency === 'SOL' ? 'SOL' : tokenSymbol}`}
                             </GlowButton>
                         </div>
                     </motion.div>

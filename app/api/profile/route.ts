@@ -18,25 +18,24 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const queryUsername = searchParams.get("username");
+    const queryId = searchParams.get("id");
 
-    // Public Fetch by Username
-    if (queryUsername) {
-        let { data: profile, error } = await supabaseAdmin
-            .from('profiles')
-            .select('id, public_key, username, bio, avatar_url, karma, interests')
-            .eq("username", queryUsername)
-            .maybeSingle();
+    // Public Fetch by Name or ID
+    if (queryUsername || queryId) {
+        let query = supabaseAdmin.from('profiles').select('id, public_key, username, bio, avatar_url, karma, interests');
         
-        console.log('Profile fetch result:', { profile, error });
+        if (queryUsername) query = query.eq("username", queryUsername);
+        else if (queryId) query = query.eq("id", queryId);
 
+        let { data: profile, error } = await query.maybeSingle();
+        
         // Handle missing columns gracefully
         if (error && error.code === '42703') {
-            console.warn('One or more columns do not exist, retrying with base columns');
-            const { data: retryProfile, error: retryError } = await supabaseAdmin
-                .from('profiles')
-                .select('id, public_key, username, bio, avatar_url')
-                .eq("username", queryUsername)
-                .maybeSingle();
+            let retryQuery = supabaseAdmin.from('profiles').select('id, public_key, username, bio, avatar_url');
+            if (queryUsername) retryQuery = retryQuery.eq("username", queryUsername);
+            else if (queryId) retryQuery = retryQuery.eq("id", queryId);
+
+            const { data: retryProfile, error: retryError } = await retryQuery.maybeSingle();
             if (retryError) throw retryError;
             profile = retryProfile ? { ...retryProfile, karma: 0, interests: [] } : null;
             error = null;
@@ -45,7 +44,6 @@ export async function GET(req: Request) {
         if (error) throw error;
         if (!profile) return NextResponse.json({ error: "Profile not found" }, { status: 404 });
         
-        console.log('Returning profile with karma:', profile.karma);
         return NextResponse.json({ profile });
     }
 

@@ -46,6 +46,7 @@ export async function POST(req: Request) {
         type = 'text',
         is_superchat = false,
         superchat_amount = 0,
+        token_symbol = "SOL",
         tx_signature = null
     } = await req.json();
 
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
             type,
             is_superchat,
             superchat_amount,
+            // token_symbol, // Temporarily disabled to prevent PGRST204
             tx_signature
         }))
         : [{
@@ -85,6 +87,7 @@ export async function POST(req: Request) {
             type: message.type || type,
             is_superchat,
             superchat_amount,
+            // token_symbol, // Temporarily disabled to prevent PGRST204
             tx_signature
         }];
 

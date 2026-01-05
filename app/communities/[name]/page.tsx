@@ -1,17 +1,15 @@
 "use client";
 
-import BroadcasterDashboard from "@/components/BroadcasterDashboard";
 import CommunityChat from "@/components/CommunityChat";
 import CommunityFeed from "@/components/CommunityFeed";
 import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
 import HoldersLeaderboard from "@/components/HoldersLeaderboard";
-import LiveStreamView from "@/components/LiveStreamView";
+import LiveStreamingRoom from "@/components/LiveStreamingRoom";
 import Navbar from "@/components/Navbar";
 import { supabase } from "@/utils/supabase";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { motion } from "framer-motion";
-import { SignalHigh } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
@@ -23,6 +21,7 @@ interface CommunityDetail {
     image_url: string;
     token_mint_address: string;
     token_metadata_uri: string;
+    token_symbol?: string;
     meteora_lb_pair_address?: string;
     members: number;
     isJoined: boolean;
@@ -70,6 +69,7 @@ export default function CommunityDetailPage() {
                     const pRes = await fetch(`/api/profile?id=${data.community.creator_id}`);
                     const pData = await pRes.json();
                     if (pData.profile) setCreatorWallet(pData.profile.public_key);
+                    if (pData.profile) console.log("creatorWallet", pData.profile.public_key);
                 }
 
                 // Fetch stream status
@@ -179,41 +179,43 @@ export default function CommunityDetailPage() {
 
             <Navbar />
 
-            <main className="relative z-10 max-w-7xl mx-auto px-4 md:px-10 pt-12 pb-20">
+            <main className={`relative z-10 mx-auto px-4 md:px-10 pb-20 transition-all duration-500 ${activeTab === "live" ? "max-w-[1800px] pt-4" : "max-w-7xl pt-12"}`}>
 
-                {/* Banner Section */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="w-full h-64 md:h-80 rounded-3xl overflow-hidden relative border border-white/10 shadow-2xl mb-10 group"
-                >
-                    <img
-                        src={community.image_url || "/images/placeholder-community.jpg"}
-                        alt={community.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                        onError={(e) => e.currentTarget.style.display = 'none'}
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
+                {/* Banner Section - Hidden in Live Mode */}
+                {activeTab !== "live" && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="w-full h-64 md:h-80 rounded-3xl overflow-hidden relative border border-white/10 shadow-2xl mb-10 group"
+                    >
+                        <img
+                            src={community.image_url || "/images/placeholder-community.jpg"}
+                            alt={community.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                            onError={(e) => e.currentTarget.style.display = 'none'}
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
 
-                    <div className="absolute bottom-0 left-0 w-full p-8 md:p-12">
-                        <h1 className="text-4xl md:text-6xl font-black font-heading tracking-tighter mb-2 text-white drop-shadow-lg">
-                            {community.name}
-                        </h1>
-                        <div className="flex items-center gap-4 text-sm font-mono">
-                            <span className="bg-orange-500/20 text-orange-300 px-3 py-1 rounded-lg border border-orange-500/30 backdrop-blur-md">
-                                {community.members.toLocaleString()} Members
-                            </span>
-                            {community.meteora_lb_pair_address && (
-                                <span className="bg-green-500/20 text-green-300 px-3 py-1 rounded-lg border border-green-500/30 backdrop-blur-md">
-                                    Liquidity Pool Live
+                        <div className="absolute bottom-0 left-0 w-full p-8 md:p-12">
+                            <h1 className="text-4xl md:text-6xl font-black font-heading tracking-tighter mb-2 text-white drop-shadow-lg">
+                                {community.name}
+                            </h1>
+                            <div className="flex items-center gap-4 text-sm font-mono">
+                                <span className="bg-orange-500/20 text-orange-300 px-3 py-1 rounded-lg border border-orange-500/30 backdrop-blur-md">
+                                    {community.members.toLocaleString()} Members
                                 </span>
-                            )}
+                                {community.meteora_lb_pair_address && (
+                                    <span className="bg-green-500/20 text-green-300 px-3 py-1 rounded-lg border border-green-500/30 backdrop-blur-md">
+                                        Liquidity Pool Live
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </motion.div>
+                    </motion.div>
+                )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                    <div className="lg:col-span-2 space-y-8">
+                <div className={activeTab === "live" ? "w-full" : "grid grid-cols-1 lg:grid-cols-3 gap-10"}>
+                    <div className={activeTab === "live" ? "w-full mb-8" : "lg:col-span-2 space-y-8"}>
 
                         {/* Tabs */}
                         <div className="flex gap-4 border-b border-white/10 pb-1 mb-6">
@@ -283,102 +285,94 @@ export default function CommunityDetailPage() {
                         )}
 
                         {activeTab === "live" && (
-                            <div className="space-y-6">
-                                {currentUserId === community.creator_id ? (
-                                    <BroadcasterDashboard
-                                        room={community.id}
-                                        username={publicKey?.toBase58() || "creator"}
-                                    />
-                                ) : (
-                                    streamStatus === 'live' ? (
-                                        <LiveStreamView
-                                            room={community.id}
-                                            username={publicKey?.toBase58() || `viewer-${Math.floor(Math.random() * 1000)}`}
-                                        />
-                                    ) : (
-                                        <div className="p-20 bg-white/5 border border-white/10 rounded-3xl text-center space-y-4">
-                                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-600">
-                                                <SignalHigh size={32} />
-                                            </div>
-                                            <h3 className="text-xl font-black uppercase tracking-tighter text-gray-400">Station Offline</h3>
-                                            <p className="text-gray-600 text-xs font-bold uppercase tracking-widest">No active signals detected in this sector.</p>
-                                        </div>
-                                    )
-                                )}
-                            </div>
+                            <LiveStreamingRoom
+                                community={community}
+                                isBroadcaster={currentUserId === community.creator_id}
+                                currentWallet={publicKey?.toBase58()}
+                                recipientWallet={creatorWallet}
+                                isMember={community.isJoined}
+                                streamStatus={streamStatus}
+                                tokenMintAddress={community.token_mint_address}
+                                tokenSymbol={community.token_symbol}
+                            />
                         )}
 
-                        <div className="flex flex-col md:flex-row gap-4">
-                            {community.isJoined ? (
-                                <button disabled className="flex-1 py-4 bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl font-bold font-mono uppercase tracking-wide cursor-default">
-                                    ✓ Joined
-                                </button>
-                            ) : (
-                                <GlowButton onClick={handleJoin} disabled={joining} className="flex-1 py-4 text-xl">
-                                    {joining ? "Joining..." : "Join Community"}
-                                </GlowButton>
-                            )}
+                        {activeTab !== "live" && (
+                            <div className="flex flex-col md:flex-row gap-4">
+                                {community.isJoined ? (
+                                    <button disabled className="flex-1 py-4 bg-green-500/20 text-green-400 border border-green-500/30 rounded-xl font-bold font-mono uppercase tracking-wide cursor-default">
+                                        ✓ Joined
+                                    </button>
+                                ) : (
+                                    <GlowButton onClick={handleJoin} disabled={joining} className="flex-1 py-4 text-xl">
+                                        {joining ? "Joining..." : "Join Community"}
+                                    </GlowButton>
+                                )}
 
-                            <button className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl font-bold font-mono uppercase tracking-wide transition-all duration-300">
-                                Share
-                            </button>
-                        </div>
+                                <button className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl font-bold font-mono uppercase tracking-wide transition-all duration-300">
+                                    Share
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Right Column: Stats & Token Info */}
-                    <div className="space-y-6">
-                        <GlassPanel className="p-6 rounded-2xl border border-white/10 bg-white/5">
-                            <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-4">Token Info</h3>
-                            <div className="space-y-4">
-                                <div>
-                                    <span className="block text-xs text-gray-500 mb-1">Mint Address</span>
-                                    <div className="flex items-center gap-2 bg-black/30 p-3 rounded-lg border border-white/5">
-                                        <code className="text-orange-400 text-xs truncate">
-                                            {community.token_mint_address}
-                                        </code>
-                                    </div>
-                                </div>
-                                {community.meteora_lb_pair_address && (
+                    {/* Right Column: Stats & Token Info - Hidden in Live Mode */}
+                    {activeTab !== "live" && (
+                        <div className="space-y-6">
+                            <GlassPanel className="p-6 rounded-2xl border border-white/10 bg-white/5">
+                                <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-4">Token Info</h3>
+                                <div className="space-y-4">
                                     <div>
-                                        <span className="block text-xs text-gray-500 mb-1">DLMM Pool</span>
+                                        <span className="block text-xs text-gray-500 mb-1">Mint Address</span>
                                         <div className="flex items-center gap-2 bg-black/30 p-3 rounded-lg border border-white/5">
-                                            <code className="text-blue-400 text-xs truncate">
-                                                {community.meteora_lb_pair_address}
+                                            <code className="text-orange-400 text-xs truncate">
+                                                {community.token_mint_address}
                                             </code>
                                         </div>
-                                        <a
-                                            href={`https://app.meteora.ag/dlmm/${community.meteora_lb_pair_address}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="block mt-2 text-xs text-center text-gray-400 hover:text-white underline"
-                                        >
-                                            View on Meteora
-                                        </a>
                                     </div>
-                                )}
-                            </div>
-                        </GlassPanel>
-
-                        <GlassPanel className="p-6 rounded-2xl border border-white/10 bg-white/5">
-                            <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-4">Community Stats</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-white/5 p-4 rounded-xl text-center">
-                                    <div className="text-2xl font-black text-white">{community.members}</div>
-                                    <div className="text-xs text-gray-500">Members</div>
+                                    {community.meteora_lb_pair_address && (
+                                        <div>
+                                            <span className="block text-xs text-gray-500 mb-1">DLMM Pool</span>
+                                            <div className="flex items-center gap-2 bg-black/30 p-3 rounded-lg border border-white/5">
+                                                <code className="text-blue-400 text-xs truncate">
+                                                    {community.meteora_lb_pair_address}
+                                                </code>
+                                            </div>
+                                            <a
+                                                href={`https://app.meteora.ag/dlmm/${community.meteora_lb_pair_address}`}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="block mt-2 text-xs text-center text-gray-400 hover:text-white underline"
+                                            >
+                                                View on Meteora
+                                            </a>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="bg-white/5 p-4 rounded-xl text-center">
-                                    <div className="text-2xl font-black text-white">$0</div>
-                                    <div className="text-xs text-gray-500">Volume (24h)</div>
-                                </div>
-                            </div>
-                        </GlassPanel>
+                            </GlassPanel>
 
-                        <HoldersLeaderboard
-                            communityId={community.id}
-                            creatorId={community.creator_id}
-                            currentUserId={currentUserId}
-                        />
-                    </div>
+                            <GlassPanel className="p-6 rounded-2xl border border-white/10 bg-white/5">
+                                <h3 className="text-lg font-bold text-gray-400 uppercase tracking-widest mb-4">Community Stats</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="bg-white/5 p-4 rounded-xl text-center">
+                                        <div className="text-2xl font-black text-white">{community.members}</div>
+                                        <div className="text-xs text-gray-500">Members</div>
+                                    </div>
+                                    <div className="bg-white/5 p-4 rounded-xl text-center">
+                                        <div className="text-2xl font-black text-white">$0</div>
+                                        <div className="text-xs text-gray-500">Volume (24h)</div>
+                                    </div>
+                                </div>
+                            </GlassPanel>
+
+                            <HoldersLeaderboard
+                                communityId={community.id}
+                                creatorId={community.creator_id}
+                                currentUserId={currentUserId}
+                            />
+                        </div>
+                    )}
                 </div>
 
             </main>
