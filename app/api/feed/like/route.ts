@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     const token = authHeader.split(" ")[1];
     
     if (!process.env.JWT_SECRET) return NextResponse.json({ error: "Server Error" }, { status: 500 });
-    let userId;
+    let userId: string;
     try {
         const decoded: any = jwt.verify(token, process.env.JWT_SECRET);
         userId = decoded.id;
@@ -35,21 +35,23 @@ export async function POST(req: Request) {
         .eq("post_id", postId)
         .eq("user_id", userId)
         .maybeSingle();
+
+    // Fetch post details first to have community_id and current count
+    const { data: post } = await supabaseAdmin
+        .from("posts")
+        .select("like_count, author_id, community_id")
+        .eq("id", postId)
+        .maybeSingle();
+
+    if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
     
     if (existing) {
-        // UNLIKE - Use batched parallel operations
-        const { data: post } = await supabaseAdmin.from("posts").select("like_count, author_id").eq("id", postId).maybeSingle();
-        if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
-
-        // Execute all operations in parallel with Promise.allSettled for fault tolerance
+        // UNLIKE
+        const newLikeCount = Math.max(0, post.like_count - 1);
+        
         await Promise.allSettled([
-            // Delete like
             supabaseAdmin.from("post_likes").delete().eq("id", existing.id),
-            
-            // Update like count
-            supabaseAdmin.from("posts").update({ like_count: Math.max(0, post.like_count - 1) }).eq("id", postId),
-            
-            // Karma updates (non-blocking)
+            supabaseAdmin.from("posts").update({ like_count: newLikeCount }).eq("id", postId),
             (async () => {
                 try {
                     await supabaseAdmin.rpc('increment_karma', { row_id: userId, amount: -1 });
@@ -58,7 +60,6 @@ export async function POST(req: Request) {
                     if (lp) await supabaseAdmin.from('profiles').update({ karma: Math.max(0, (lp.karma || 0) - 1) }).eq('id', userId);
                 }
             })(),
-            
             (async () => {
                 try {
                     await supabaseAdmin.rpc('increment_karma', { row_id: post.author_id, amount: -5 });
@@ -69,21 +70,29 @@ export async function POST(req: Request) {
             })()
         ]);
 
+        // Broadcast unlike
+        await supabaseAdmin.channel(`post-updates-${postId}`).send({
+            type: 'broadcast',
+            event: 'count-updated',
+            payload: { like_count: newLikeCount }
+        });
+
+        if (post.community_id) {
+            await supabaseAdmin.channel(`community-feed-${post.community_id}`).send({
+                type: 'broadcast',
+                event: 'post-update',
+                payload: { id: postId, like_count: newLikeCount }
+            });
+        }
+
         return NextResponse.json({ liked: false });
     } else {
-        // LIKE - Use batched parallel operations
-        const { data: post } = await supabaseAdmin.from("posts").select("like_count, author_id").eq("id", postId).maybeSingle();
-        if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+        // LIKE
+        const newLikeCount = post.like_count + 1;
 
-        // Execute all operations in parallel
         await Promise.allSettled([
-            // Insert like
             supabaseAdmin.from("post_likes").insert({ post_id: postId, user_id: userId }),
-            
-            // Update like count
-            supabaseAdmin.from("posts").update({ like_count: post.like_count + 1 }).eq("id", postId),
-            
-            // Karma updates (non-blocking)
+            supabaseAdmin.from("posts").update({ like_count: newLikeCount }).eq("id", postId),
             (async () => {
                 try {
                     await supabaseAdmin.rpc('increment_karma', { row_id: userId, amount: 1 });
@@ -92,7 +101,6 @@ export async function POST(req: Request) {
                     if (lp) await supabaseAdmin.from('profiles').update({ karma: (lp.karma || 0) + 1 }).eq('id', userId);
                 }
             })(),
-            
             (async () => {
                 try {
                     await supabaseAdmin.rpc('increment_karma', { row_id: post.author_id, amount: 5 });
@@ -101,8 +109,6 @@ export async function POST(req: Request) {
                     if (ap) await supabaseAdmin.from('profiles').update({ karma: (ap.karma || 0) + 5 }).eq('id', post.author_id);
                 }
             })(),
-            
-            // Notification (only if not self-like)
             post.author_id !== userId ? supabaseAdmin.from("notifications").insert({
                 user_id: post.author_id,
                 type: 'like',
@@ -111,6 +117,21 @@ export async function POST(req: Request) {
                 is_read: false
             }) : Promise.resolve()
         ]);
+
+        // Broadcast like
+        await supabaseAdmin.channel(`post-updates-${postId}`).send({
+            type: 'broadcast',
+            event: 'count-updated',
+            payload: { like_count: newLikeCount }
+        });
+
+        if (post.community_id) {
+            await supabaseAdmin.channel(`community-feed-${post.community_id}`).send({
+                type: 'broadcast',
+                event: 'post-update',
+                payload: { id: postId, like_count: newLikeCount }
+            });
+        }
 
         return NextResponse.json({ liked: true });
     }

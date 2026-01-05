@@ -11,6 +11,7 @@ interface UserProfile {
   username: string;
   bio?: string;
   avatar_url?: string;
+  interests?: string[];
 }
 
 export default function ProfilePage() {
@@ -24,6 +25,9 @@ export default function ProfilePage() {
   const [editUsername, setEditUsername] = useState("");
   const [editBio, setEditBio] = useState("");
   const [editAvatar, setEditAvatar] = useState("");
+  const [editInterests, setEditInterests] = useState<string[]>([]);
+
+  const INTEREST_OPTIONS = ["DeFi", "NFTs", "Gaming", "DAOs", "Trading", "Development", "Art", "Memes", "Music", "Social"];
 
   const router = useRouter();
 
@@ -54,6 +58,7 @@ export default function ProfilePage() {
         setEditUsername(profile.username || "");
         setEditBio(profile.bio || "");
         setEditAvatar(profile.avatar_url || "");
+        setEditInterests(profile.interests || []);
 
       } catch (err: any) {
         console.error('Error fetching profile:', err);
@@ -79,7 +84,8 @@ export default function ProfilePage() {
         body: JSON.stringify({
           username: editUsername,
           bio: editBio,
-          avatar_url: editAvatar
+          avatar_url: editAvatar,
+          interests: editInterests
         })
       });
 
@@ -192,6 +198,39 @@ export default function ProfilePage() {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/5 blur-3xl rounded-full"></div>
                 </div>
               )}
+            </div>
+
+            {/* Interests Section */}
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 mb-3 block">Interests</label>
+              <div className="flex flex-wrap gap-2">
+                {(isEditing ? INTEREST_OPTIONS : (userProfile.interests || [])).map(interest => {
+                  const isSelected = isEditing ? editInterests.includes(interest) : true;
+                  return (
+                    <button
+                      key={interest}
+                      disabled={!isEditing}
+                      onClick={() => {
+                        if (!isEditing) return;
+                        setEditInterests(prev =>
+                          prev.includes(interest)
+                            ? prev.filter(i => i !== interest)
+                            : [...prev, interest]
+                        );
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${isSelected
+                          ? "bg-orange-500 text-white border border-orange-400 shadow-lg shadow-orange-500/20"
+                          : "bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10"
+                        }`}
+                    >
+                      {interest}
+                    </button>
+                  );
+                })}
+                {!isEditing && (!userProfile.interests || userProfile.interests.length === 0) && (
+                  <p className="text-gray-500 text-xs italic">No interests selected yet.</p>
+                )}
+              </div>
             </div>
           </div>
 

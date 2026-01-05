@@ -30,7 +30,34 @@ export async function GET(req: Request) {
         } catch {}
     }
 
-    // OPTIMIZED: Single query with all joins - reduces round trips from N+1 to 1
+    // 1. Fetch user memberships and interests for personalization
+    let joinedCommunityIds: string[] = [];
+    let userInterests: string[] = [];
+    
+    if (currentUserId) {
+        // Fetch joined communities
+        const { data: memberships } = await supabaseAdmin
+            .from("community_members")
+            .select("community_id")
+            .eq("profile_id", currentUserId);
+        
+        if (memberships) {
+            joinedCommunityIds = memberships.map(m => m.community_id);
+        }
+
+        // Fetch user interests from profile
+        const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("interests")
+            .eq("id", currentUserId)
+            .single();
+        
+        if (profile?.interests) {
+            userInterests = profile.interests;
+        }
+    }
+
+    // 2. Fetch Posts
     const { data: posts, error } = await supabaseAdmin
       .from("posts")
       .select(`
@@ -41,12 +68,12 @@ export async function GET(req: Request) {
         comment_count,
         author_id,
         community_id,
-        author:profiles!posts_author_id_fkey(username, avatar_url),
-        community:communities!posts_community_id_fkey(name, image_url),
+        author:profiles(username, avatar_url),
+        community:communities(name, image_url, description),
         media(file_url)
       `)
       .order("created_at", { ascending: false })
-      .limit(100);
+      .limit(200);
 
     if (error) {
         console.error("Global feed error:", error);
@@ -57,12 +84,29 @@ export async function GET(req: Request) {
         return NextResponse.json({ posts: [] }, { status: 200 });
     }
 
-    // Calculate Scores & Map Data (in-memory, fast)
+    // 3. Calculate Scores & Map Data (Personalized)
     const scoredPosts = posts.map(p => {
         const hoursAge = (Date.now() - new Date(p.created_at).getTime()) / (1000 * 60 * 60);
         const likeCount = p.like_count || 0;
         const commentCount = p.comment_count || 0;
-        const score = (likeCount * 2) + (commentCount * 3) - (hoursAge * 0.1);
+        
+        // Base Score
+        let score = (likeCount * 2) + (commentCount * 3) - (hoursAge * 0.1);
+        
+        // Personalization Boosts
+        if (joinedCommunityIds.includes(p.community_id)) {
+            score += 10; // High boost for joined communities
+        }
+
+        // Interest-based Boost (if community description or content matches interests)
+        if (userInterests.length > 0) {
+            const community = Array.isArray(p.community) ? p.community[0] : p.community;
+            const contentToMatch = `${p.content} ${community?.name || ''} ${community?.description || ''}`.toLowerCase();
+            const matchedInterests = userInterests.filter(interest => 
+                contentToMatch.includes(interest.toLowerCase())
+            );
+            score += matchedInterests.length * 5;
+        }
         
         return { 
             ...p, 
@@ -77,7 +121,7 @@ export async function GET(req: Request) {
 
     // Sort by Score DESC, then created_at DESC
     scoredPosts.sort((a, b) => {
-        if (b.trendScore === a.trendScore) {
+        if (Math.abs(b.trendScore - a.trendScore) < 0.01) {
             return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         }
         return b.trendScore - a.trendScore;
@@ -86,12 +130,11 @@ export async function GET(req: Request) {
     // Paginate in memory
     const pagedPosts = scoredPosts.slice(from, to + 1);
 
-    // OPTIMIZED: Batch fetch likes in ONE query instead of N queries
+    // 4. Batch fetch likes
     let enrichedPosts = pagedPosts;
     if (currentUserId && pagedPosts.length > 0) {
         const postIds = pagedPosts.map(p => p.id);
         
-        // Single batched query for all likes
         const { data: likes } = await supabaseAdmin
             .from("post_likes")
             .select("post_id")

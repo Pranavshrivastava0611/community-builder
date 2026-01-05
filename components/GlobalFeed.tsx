@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import FeedPost from "./FeedPost";
 import NotificationsPopover from "./NotificationsPopover";
+import PostModal from "./PostModal";
 
 interface Post {
     id: string;
@@ -50,6 +51,8 @@ export default function GlobalFeed() {
     const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
     const [recommendations, setRecommendations] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+    const [isPostModalOpen, setIsPostModalOpen] = useState(false);
 
     const fetchFeed = async () => {
         setLoading(true);
@@ -169,16 +172,23 @@ export default function GlobalFeed() {
                     .single();
 
                 if (fullPost) {
+                    const author = Array.isArray(fullPost.author) ? fullPost.author[0] : fullPost.author;
+                    const community = Array.isArray(fullPost.community) ? fullPost.community[0] : fullPost.community;
+
                     const formatted = {
                         ...fullPost,
-                        user: fullPost.author,
+                        user: author,
                         user_id: fullPost.author_id,
+                        community: community,
                         like_count: fullPost.like_count || 0,
-                        comment_count: fullPost.comments?.[0]?.count || 0,
-                        image_url: fullPost.media?.[0]?.file_url || null,
+                        comment_count: Array.isArray(fullPost.comments) ? (fullPost.comments[0]?.count || 0) : (fullPost.comments?.count || 0),
+                        image_url: Array.isArray(fullPost.media) ? (fullPost.media[0]?.file_url || null) : (fullPost.media?.file_url || null),
                         isLiked: false
                     };
-                    setPosts(prev => [formatted, ...prev]);
+                    setPosts(prev => {
+                        if (prev.some(p => p.id === formatted.id)) return prev;
+                        return [formatted, ...prev];
+                    });
                 }
             })
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts' }, (payload) => {
@@ -187,6 +197,13 @@ export default function GlobalFeed() {
                         ? { ...p, like_count: payload.new.like_count }
                         : p
                 ));
+            })
+            .on('broadcast', { event: 'post-update' }, (payload: any) => {
+                if (payload.payload?.id) {
+                    setPosts(prev => prev.map(p =>
+                        p.id === payload.payload.id ? { ...p, like_count: payload.payload.like_count } : p
+                    ));
+                }
             })
             .subscribe();
 
@@ -247,6 +264,11 @@ export default function GlobalFeed() {
 
     const handleLikeToggle = (postId: string, newLiked: boolean) => {
         setPosts(prev => prev.map(p => p.id === postId ? { ...p, isLiked: newLiked, like_count: newLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1) } : p));
+    };
+
+    const handleDetailView = (post: Post) => {
+        setSelectedPost(post);
+        setIsPostModalOpen(true);
     };
 
     const handleSwitchWallet = async () => {
@@ -341,7 +363,12 @@ export default function GlobalFeed() {
                             );
 
                             return uniquePosts.map(post => (
-                                <FeedPost key={post.id} post={post} onLikeToggle={handleLikeToggle} />
+                                <FeedPost
+                                    key={post.id}
+                                    post={post}
+                                    onLikeToggle={handleLikeToggle}
+                                    onDetailView={handleDetailView}
+                                />
                             ));
                         })()}
                         {posts.length === 0 && (
@@ -473,6 +500,13 @@ export default function GlobalFeed() {
                     <NotificationsPopover onClose={() => setIsNotificationsOpen(false)} />
                 )}
             </AnimatePresence>
+
+            <PostModal
+                post={selectedPost}
+                isOpen={isPostModalOpen}
+                onClose={() => setIsPostModalOpen(false)}
+                onLikeToggle={handleLikeToggle}
+            />
         </div>
     );
 }

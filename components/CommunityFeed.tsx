@@ -4,6 +4,7 @@ import { supabase } from "@/utils/supabase";
 import { useEffect, useState } from "react";
 import CreatePost from "./CreatePost";
 import FeedPost from "./FeedPost";
+import PostModal from "./PostModal";
 
 interface Post {
     id: string;
@@ -19,6 +20,10 @@ interface Post {
         username?: string;
         avatar_url?: string;
     };
+    community?: {
+        name: string;
+        image_url?: string;
+    };
 }
 
 interface CommunityFeedProps {
@@ -29,6 +34,9 @@ interface CommunityFeedProps {
 export default function CommunityFeed({ communityId, isMember }: CommunityFeedProps) {
     const [posts, setPosts] = useState<Post[]>([]);
     const [loading, setLoading] = useState(true);
+    const [realtimeStatus, setRealtimeStatus] = useState<string>("connecting");
+    const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+    const [isPostModalOpen, setIsPostModalOpen] = useState(false);
 
     useEffect(() => {
         async function fetchFeed() {
@@ -37,7 +45,10 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
                 const headers: any = {};
                 if (token) headers["Authorization"] = `Bearer ${token}`;
 
-                const res = await fetch(`/api/feed/${communityId}`, { headers });
+                const res = await fetch(`/api/feed/${communityId}`, {
+                    headers,
+                    cache: 'no-store'
+                });
                 const data = await res.json();
                 if (data.posts) {
                     setPosts(data.posts);
@@ -49,65 +60,78 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
             }
         }
         fetchFeed();
+    }, [communityId]);
 
-        // Realtime Subscription
+    useEffect(() => {
+        if (!supabase) return;
+
         const channel = supabase
             .channel(`community-feed-${communityId}`)
             .on(
                 'postgres_changes',
                 {
-                    event: 'INSERT',
+                    event: '*',
                     schema: 'public',
-                    table: 'posts',
-                    filter: `community_id=eq.${communityId}`
+                    table: 'posts'
                 },
                 async (payload) => {
-                    console.log('New community post received via realtime:', payload);
-                    // Fetch full post details
-                    const { data: fullPost, error } = await supabase
-                        .from('posts')
-                        .select(`
-                            *,
-                            author:profiles(username, avatar_url),
-                            comments(count),
-                            media(file_url)
-                        `)
-                        .eq('id', payload.new.id)
-                        .single();
+                    if (payload.new && payload.new.community_id !== communityId) return;
 
-                    if (fullPost && !error) {
-                        const formattedPost = {
-                            ...fullPost,
-                            user: fullPost.author,
-                            user_id: fullPost.author_id,
-                            like_count: fullPost.like_count || 0,
-                            comment_count: fullPost.comments?.[0]?.count || 0,
-                            image_url: fullPost.media?.[0]?.file_url || null,
-                            isLiked: false
-                        };
-                        setPosts(prev => {
-                            // Avoid duplicates (if locally created post also triggers subscription)
-                            if (prev.some(p => p.id === formattedPost.id)) return prev;
-                            return [formattedPost, ...prev];
-                        });
+                    if (payload.eventType === 'INSERT') {
+                        const { data: fullPost } = await supabase
+                            .from('posts')
+                            .select(`*, author:profiles(username, avatar_url), comments(count), media(file_url)`)
+                            .eq('id', payload.new.id)
+                            .single();
+
+                        if (fullPost) {
+                            const author = Array.isArray(fullPost.author) ? fullPost.author[0] : fullPost.author;
+                            const formattedPost = {
+                                ...fullPost,
+                                user: author,
+                                user_id: fullPost.author_id,
+                                like_count: fullPost.like_count || 0,
+                                comment_count: Array.isArray(fullPost.comments) ? (fullPost.comments[0]?.count || 0) : (fullPost.comments?.count || 0),
+                                image_url: Array.isArray(fullPost.media) ? (fullPost.media[0]?.file_url || null) : (fullPost.media?.file_url || null),
+                                isLiked: false
+                            };
+                            setPosts(prev => {
+                                if (prev.some(p => p.id === formattedPost.id)) return prev;
+                                return [formattedPost, ...prev];
+                            });
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        setPosts(prev => prev.map(p =>
+                            p.id === payload.new.id ? { ...p, like_count: payload.new.like_count } : p
+                        ));
+                        if (selectedPost?.id === payload.new.id) {
+                            setSelectedPost(prev => prev ? { ...prev, like_count: payload.new.like_count } : null);
+                        }
                     }
                 }
             )
-            .subscribe();
+            .on('broadcast', { event: 'post-update' }, (payload: any) => {
+                if (payload.payload?.id) {
+                    setPosts(prev => prev.map(p =>
+                        p.id === payload.payload.id ? { ...p, like_count: payload.payload.like_count } : p
+                    ));
+                    if (selectedPost?.id === payload.payload.id) {
+                        setSelectedPost(prev => prev ? { ...prev, like_count: payload.payload.like_count } : null);
+                    }
+                }
+            })
+            .subscribe((status) => {
+                setRealtimeStatus(status);
+            });
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [communityId]);
+    }, [communityId, selectedPost]);
 
     const handlePostCreated = (newPost: any) => {
-        // Add new post to top with deduplication check
         setPosts(prev => {
-            // Check if post already exists (might have been added via real-time)
-            if (prev.some(p => p.id === newPost.id)) {
-                console.log('Post already exists, skipping duplicate:', newPost.id);
-                return prev;
-            }
+            if (prev.some(p => p.id === newPost.id)) return prev;
             return [newPost, ...prev];
         });
     };
@@ -123,31 +147,62 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
             }
             return p;
         }));
+        if (selectedPost?.id === postId) {
+            setSelectedPost(prev => prev ? {
+                ...prev,
+                isLiked: newLiked,
+                like_count: newLiked ? prev.like_count + 1 : Math.max(0, prev.like_count - 1)
+            } : null);
+        }
     };
 
-    // Ensure unique posts before rendering (safety net)
-    const uniquePosts = posts.filter((post, index, self) =>
-        index === self.findIndex(p => p.id === post.id)
-    );
+    const handleDetailView = (post: Post) => {
+        setSelectedPost(post);
+        setIsPostModalOpen(true);
+    };
 
     if (loading) {
-        return <div className="text-center py-10 text-gray-500 animate-pulse">Loading feed...</div>;
+        return (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-gray-500 font-bold uppercase tracking-widest text-[10px]">Syncing Community Feed...</p>
+            </div>
+        );
     }
 
     return (
-        <div>
+        <div className="relative">
+            <div className="absolute -top-12 right-0 flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+                <div className={`w-1.5 h-1.5 rounded-full ${realtimeStatus === 'SUBSCRIBED' ? 'bg-green-500' : 'bg-red-500'} animate-pulse`} />
+                <span className="text-[8px] font-black uppercase tracking-tighter text-gray-400">
+                    {realtimeStatus === 'SUBSCRIBED' ? 'Live' : 'Degraded'}
+                </span>
+            </div>
+
             <CreatePost communityId={communityId} isMember={isMember} onPostCreated={handlePostCreated} />
 
             <div className="space-y-4">
-                {uniquePosts.map(post => (
-                    <FeedPost key={post.id} post={post} onLikeToggle={handleLikeToggle} />
+                {posts.map(post => (
+                    <FeedPost
+                        key={post.id}
+                        post={post}
+                        onLikeToggle={handleLikeToggle}
+                        onDetailView={handleDetailView}
+                    />
                 ))}
-                {uniquePosts.length === 0 && (
-                    <div className="text-center py-10 text-gray-500">
-                        No posts yet. Be the first to start the conversation!
+                {posts.length === 0 && (
+                    <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/5 border-dashed">
+                        <p className="text-gray-500 font-bold italic">No signals yet. Start the chain!</p>
                     </div>
                 )}
             </div>
+
+            <PostModal
+                post={selectedPost}
+                isOpen={isPostModalOpen}
+                onClose={() => setIsPostModalOpen(false)}
+                onLikeToggle={handleLikeToggle}
+            />
         </div>
     );
 }

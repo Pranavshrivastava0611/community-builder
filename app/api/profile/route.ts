@@ -23,22 +23,22 @@ export async function GET(req: Request) {
     if (queryUsername) {
         let { data: profile, error } = await supabaseAdmin
             .from('profiles')
-            .select('id, public_key, username, bio, avatar_url, karma')
+            .select('id, public_key, username, bio, avatar_url, karma, interests')
             .eq("username", queryUsername)
             .maybeSingle();
         
-        console.log('Profile fetch result:', { profile, error, hasKarma: profile?.karma !== undefined });
+        console.log('Profile fetch result:', { profile, error });
 
-        // Handle missing karma column gracefully
+        // Handle missing columns gracefully
         if (error && error.code === '42703') {
-            console.warn('Karma column does not exist, fetching without it');
+            console.warn('One or more columns do not exist, retrying with base columns');
             const { data: retryProfile, error: retryError } = await supabaseAdmin
                 .from('profiles')
                 .select('id, public_key, username, bio, avatar_url')
                 .eq("username", queryUsername)
                 .maybeSingle();
             if (retryError) throw retryError;
-            profile = retryProfile ? { ...retryProfile, karma: 0 } : null;
+            profile = retryProfile ? { ...retryProfile, karma: 0, interests: [] } : null;
             error = null;
         }
 
@@ -60,11 +60,11 @@ export async function GET(req: Request) {
 
     let { data: profile, error: fetchProfileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, public_key, username, bio, avatar_url, karma')
+      .select('id, public_key, username, bio, avatar_url, karma, interests')
       .eq('id', userId)
       .maybeSingle();
 
-    // Handle missing karma column gracefully
+    // Handle missing columns gracefully
     if (fetchProfileError && fetchProfileError.code === '42703') {
         const { data: retryProfile, error: retryError } = await supabaseAdmin
             .from('profiles')
@@ -72,7 +72,7 @@ export async function GET(req: Request) {
             .eq('id', userId)
             .maybeSingle();
         if (retryError) throw retryError;
-        profile = retryProfile ? { ...retryProfile, karma: 0 } : null;
+        profile = retryProfile ? { ...retryProfile, karma: 0, interests: [] } : null;
         fetchProfileError = null;
     }
 
@@ -101,11 +101,14 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    const { username, bio, avatar_url } = await req.json();
+    const { username, bio, avatar_url, interests } = await req.json();
+
+    const updateData: any = { username, bio, avatar_url };
+    if (interests) updateData.interests = interests;
 
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
       .from('profiles')
-      .update({ username, bio, avatar_url })
+      .update(updateData)
       .eq('id', userId)
       .select()
       .single();

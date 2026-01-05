@@ -8,6 +8,67 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
+export async function GET(
+    request: NextRequest,
+    context: { params: Promise<{ postId: string }> }
+) {
+    try {
+        const { postId } = await context.params;
+        const authHeader = request.headers.get("Authorization");
+        let currentUserId: string | null = null;
+        
+        if (authHeader?.startsWith("Bearer ") && process.env.JWT_SECRET) {
+            try {
+                const token = authHeader.split(" ")[1];
+                const decoded: any = jwt.verify(token, process.env.JWT_SECRET);
+                currentUserId = decoded.id;
+            } catch {}
+        }
+
+        const { data: post, error } = await supabaseAdmin
+            .from("posts")
+            .select(`
+                *,
+                author:profiles(id, username, avatar_url),
+                community:communities(id, name, image_url),
+                comments(count),
+                media(file_url)
+            `)
+            .eq("id", postId)
+            .single();
+
+        if (error || !post) {
+            return NextResponse.json({ error: "Post not found" }, { status: 404 });
+        }
+
+        // Check if liked by current user
+        let isLiked = false;
+        if (currentUserId) {
+            const { data: like } = await supabaseAdmin
+                .from("post_likes")
+                .select("id")
+                .eq("post_id", postId)
+                .eq("user_id", currentUserId)
+                .maybeSingle();
+            isLiked = !!like;
+        }
+
+        const formatted = {
+            ...post,
+            user: post.author,
+            comment_count: Array.isArray(post.comments) ? (post.comments[0]?.count || 0) : (post.comments?.count || 0),
+            image_url: Array.isArray(post.media) ? (post.media[0]?.file_url || null) : (post.media?.file_url || null),
+            isLiked
+        };
+
+        return NextResponse.json({ post: formatted }, { status: 200 });
+
+    } catch (err: any) {
+        console.error("GET post error:", err);
+        return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    }
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ postId: string }> }

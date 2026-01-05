@@ -39,9 +39,9 @@ export async function POST(req: Request) {
     }
 
     // 2. Parse Body
-    const { communityId, message, type = 'text' } = await req.json();
+    const { communityId, message, messages, type = 'text' } = await req.json();
 
-    if (!communityId || !message) {
+    if (!communityId || (!message && (!messages || messages.length === 0))) {
         return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
     }
 
@@ -57,25 +57,50 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "You must join the community to chat." }, { status: 403 });
     }
 
-    // 4. Insert Message
-    const { data: insertedMessage, error: insertError } = await supabaseAdmin
-        .from("community_chat_messages")
-        .insert({
+    // 4. Handle Batch or Single Insert
+    const messagesToInsert = messages 
+        ? messages.map((m: string) => ({
             community_id: communityId,
             user_id: userId,
-            wallet: wallet || "Unknown", // Fallback
-            message,
+            wallet: wallet || "Unknown",
+            message: m,
             type
-        })
-        .select("*")
-        .single();
+        }))
+        : [{
+            community_id: communityId,
+            user_id: userId,
+            wallet: wallet || "Unknown",
+            message,
+            type: message.type || type
+        }];
+
+    const { data: insertedMessages, error: insertError } = await supabaseAdmin
+        .from("community_chat_messages")
+        .insert(messagesToInsert)
+        .select("*");
 
     if (insertError) {
         console.error("Chat insert error:", insertError);
         return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
     }
 
-    return NextResponse.json({ message: insertedMessage }, { status: 200 });
+    // 5. Broadcast for higher reliability
+    try {
+        await supabaseAdmin
+            .channel(`room:${communityId}`)
+            .send({
+                type: 'broadcast',
+                event: 'new-batch',
+                payload: { messages: insertedMessages }
+            });
+    } catch (e) {
+        console.error("Broadcast error:", e);
+    }
+
+    return NextResponse.json({ 
+        message: insertedMessages?.[0], 
+        messages: insertedMessages 
+    }, { status: 200 });
 
   } catch (error: any) {
     console.error("API /api/chat/send error:", error);

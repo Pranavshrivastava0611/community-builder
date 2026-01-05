@@ -32,9 +32,10 @@ interface Post {
 interface FeedPostProps {
     post: Post;
     onLikeToggle: (postId: string, newLiked: boolean) => void;
+    onDetailView?: (post: Post) => void;
 }
 
-export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostProps) {
+export default function FeedPost({ post: initialPost, onLikeToggle, onDetailView }: FeedPostProps) {
     const [post, setPost] = useState(initialPost);
 
     // Keep internal state in sync with parent (Realtime updates)
@@ -80,25 +81,11 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
         }
     }, [post.community_id]);
 
-    useEffect(() => {
-        const channel = supabase
-            .channel(`post-comments-${post.id}`)
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'comments', filter: `post_id=eq.${post.id}` },
-                () => { setCount(prev => prev + 1); }
-            )
-            .subscribe();
-        return () => { supabase.removeChannel(channel); };
-    }, [post.id]);
-
-    // Like Buffer / Batching Logic to handle high-frequency clicks
+    // Like Buffer
     const [pendingLike, setPendingLike] = useState<boolean | null>(null);
 
     useEffect(() => {
         if (pendingLike === null) return;
-
-        // Collect all clicks and only hit the DB once the user settles
         const bufferTimeout = setTimeout(async () => {
             try {
                 const token = localStorage.getItem("authToken");
@@ -107,35 +94,26 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                     setPendingLike(null);
                     return;
                 }
-
-                // Call API only once with the final intent
                 const res = await fetch("/api/feed/like", {
                     method: "POST",
                     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
                     body: JSON.stringify({ postId: post.id })
                 });
-
                 if (!res.ok) throw new Error("Sync failed");
             } catch (error) {
                 console.error("Like buffer sync error:", error);
-                // Revert UI on error
                 onLikeToggle(post.id, !pendingLike);
             } finally {
                 setPendingLike(null);
             }
-        }, 1200); // 1.2s batching window
-
+        }, 1200);
         return () => clearTimeout(bufferTimeout);
     }, [pendingLike, post.id, onLikeToggle]);
 
     const handleLike = () => {
         if (liking) return;
         const newLikedState = !post.isLiked;
-
-        // Instant Feedback (Optimistic UI)
         onLikeToggle(post.id, newLikedState);
-
-        // Add to buffer
         setPendingLike(newLikedState);
     };
 
@@ -168,6 +146,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
             const fetchData = await fetchRes.json();
             if (fetchData.comments) setComments(fetchData.comments);
             setNewComment("");
+            setCount(prev => prev + 1);
         } catch { toast.error("Failed"); } finally { setCommenting(false); }
     };
 
@@ -175,7 +154,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
         const shareData = {
             title: `Post by ${post.user?.username || "anonymous"}`,
             text: post.content.substring(0, 100),
-            url: window.location.origin + `/communities/${post.community_id}/?post=${post.id}`,
+            url: window.location.origin + `/post/${post.id}`,
         };
 
         try {
@@ -190,7 +169,6 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
         }
     };
 
-    // Delete Modal State
     const [itemToDelete, setItemToDelete] = useState<{ type: 'post' | 'comment', id: string } | null>(null);
 
     const handleEditPost = async () => {
@@ -212,7 +190,6 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
 
     const confirmDelete = async () => {
         if (!itemToDelete) return;
-
         try {
             const token = localStorage.getItem("authToken");
             if (itemToDelete.type === 'post') {
@@ -256,6 +233,13 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
     };
 
     if (isDeleted) return null;
+
+    const handleDetailClick = (e: React.MouseEvent) => {
+        if (onDetailView) {
+            e.preventDefault();
+            onDetailView(post);
+        }
+    };
 
     return (
         <div className="w-full bg-black border-b border-white/5 pb-10 relative">
@@ -313,15 +297,22 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                 </div>
             </div>
 
-            {/* Media Area */}
             {post.image_url ? (
-                <div className="w-full aspect-[4/5] sm:aspect-square bg-neutral-900 rounded-sm border border-white/5 overflow-hidden mb-3">
-                    <img src={post.image_url} alt="" className="w-full h-full object-cover" />
-                </div>
+                <Link
+                    href={`/post/${post.id}`}
+                    onClick={handleDetailClick}
+                    className="w-full aspect-[4/5] sm:aspect-square bg-neutral-900 rounded-sm border border-white/5 overflow-hidden mb-3 block cursor-pointer group"
+                >
+                    <img src={post.image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                </Link>
             ) : (
-                <div className="w-full p-10 bg-gradient-to-br from-neutral-900 to-black border border-white/5 rounded-sm mb-3">
+                <Link
+                    href={`/post/${post.id}`}
+                    onClick={handleDetailClick}
+                    className="w-full p-10 bg-gradient-to-br from-neutral-900 to-black border border-white/5 rounded-sm mb-3 block cursor-pointer group hover:border-orange-500/30 transition-colors"
+                >
                     {isEditingPost ? (
-                        <div className="space-y-4">
+                        <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
                             <textarea
                                 value={editPostContent}
                                 onChange={e => setEditPostContent(e.target.value)}
@@ -333,9 +324,9 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                             </div>
                         </div>
                     ) : (
-                        <p className="text-lg font-medium tracking-tight whitespace-pre-wrap">{post.content}</p>
+                        <p className="text-lg font-medium tracking-tight whitespace-pre-wrap group-hover:text-orange-500 transition-colors font-sans">{post.content}</p>
                     )}
-                </div>
+                </Link>
             )}
 
             {/* Action Bar */}
@@ -366,7 +357,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                 <div className="text-sm">
                     <span className="font-black text-white mr-2">{post.user?.username || "anonymous"}</span>
                     {isEditingPost && post.image_url ? (
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-2 space-y-2" onClick={(e) => e.stopPropagation()}>
                             <textarea
                                 value={editPostContent}
                                 onChange={e => setEditPostContent(e.target.value)}
@@ -405,7 +396,7 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                             {comments.map((c: any) => (
                                 <div key={c.id} className="flex justify-between items-start">
                                     <div className="flex gap-3 text-sm">
-                                        <span className="font-black text-white whitespace-nowrap">{c.author?.username || "user"}</span>
+                                        <Link href={`/profile/${c.author?.username}`} className="font-black text-white whitespace-nowrap hover:text-orange-500 transition-colors">{c.author?.username || "user"}</Link>
                                         <span className="text-gray-300">{c.content}</span>
                                     </div>
                                     {(currentUserId === c.author_id || currentUserRole === 'leader' || currentUserRole === 'moderator') && (
@@ -426,40 +417,19 @@ export default function FeedPost({ post: initialPost, onLikeToggle }: FeedPostPr
                 )}
             </AnimatePresence>
 
-            {/* Premium Delete Confirmation Modal */}
+            {/* Delete Modal */}
             <AnimatePresence>
                 {itemToDelete && (
                     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setItemToDelete(null)}
-                            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                            className="relative w-full max-w-sm bg-[#121212] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
-                        >
-                            <div className="p-8 text-center">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setItemToDelete(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm bg-[#121212] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+                            <div className="p-8 text-center border-b border-white/5">
                                 <h3 className="text-xl font-black text-white mb-2">Delete {itemToDelete.type}?</h3>
-                                <p className="text-gray-400 text-sm">Are you sure you want to delete this {itemToDelete.type}? This action cannot be undone.</p>
+                                <p className="text-gray-400 text-sm">Action cannot be undone.</p>
                             </div>
-                            <div className="flex flex-col border-t border-white/5">
-                                <button
-                                    onClick={confirmDelete}
-                                    className="w-full py-4 text-red-500 font-black text-sm hover:bg-red-500/5 transition-colors border-b border-white/5"
-                                >
-                                    Delete
-                                </button>
-                                <button
-                                    onClick={() => setItemToDelete(null)}
-                                    className="w-full py-4 text-white font-bold text-sm hover:bg-white/5 transition-colors"
-                                >
-                                    Cancel
-                                </button>
+                            <div className="flex flex-col">
+                                <button onClick={confirmDelete} className="w-full py-4 text-red-500 font-black text-sm hover:bg-red-500/5 transition-colors border-b border-white/5">Delete</button>
+                                <button onClick={() => setItemToDelete(null)} className="w-full py-4 text-white font-bold text-sm hover:bg-white/5 transition-colors">Cancel</button>
                             </div>
                         </motion.div>
                     </div>
