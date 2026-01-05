@@ -39,7 +39,15 @@ export async function POST(req: Request) {
     }
 
     // 2. Parse Body
-    const { communityId, message, messages, type = 'text' } = await req.json();
+    const { 
+        communityId, 
+        message, 
+        messages, 
+        type = 'text',
+        is_superchat = false,
+        superchat_amount = 0,
+        tx_signature = null
+    } = await req.json();
 
     if (!communityId || (!message && (!messages || messages.length === 0))) {
         return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
@@ -64,14 +72,20 @@ export async function POST(req: Request) {
             user_id: userId,
             wallet: wallet || "Unknown",
             message: m,
-            type
+            type,
+            is_superchat,
+            superchat_amount,
+            tx_signature
         }))
         : [{
             community_id: communityId,
             user_id: userId,
             wallet: wallet || "Unknown",
             message,
-            type: message.type || type
+            type: message.type || type,
+            is_superchat,
+            superchat_amount,
+            tx_signature
         }];
 
     const { data: insertedMessages, error: insertError } = await supabaseAdmin

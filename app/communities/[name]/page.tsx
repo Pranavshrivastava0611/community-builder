@@ -1,13 +1,17 @@
 "use client";
 
+import BroadcasterDashboard from "@/components/BroadcasterDashboard";
 import CommunityChat from "@/components/CommunityChat";
 import CommunityFeed from "@/components/CommunityFeed";
 import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
 import HoldersLeaderboard from "@/components/HoldersLeaderboard";
+import LiveStreamView from "@/components/LiveStreamView";
 import Navbar from "@/components/Navbar";
+import { supabase } from "@/utils/supabase";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { motion } from "framer-motion";
+import { SignalHigh } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "react-hot-toast";
@@ -30,12 +34,14 @@ export default function CommunityDetailPage() {
     const communityName = decodeURIComponent(params!.name as string);
     const router = useRouter();
     const { connected, publicKey } = useWallet();
-    const [activeTab, setActiveTab] = useState<"overview" | "feed" | "chat">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "feed" | "chat" | "live">("overview");
+    const [streamStatus, setStreamStatus] = useState<'live' | 'idle'>('idle');
 
     const [community, setCommunity] = useState<CommunityDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [joining, setJoining] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+    const [creatorWallet, setCreatorWallet] = useState<string | undefined>();
 
     useEffect(() => {
         async function fetchData() {
@@ -58,6 +64,19 @@ export default function CommunityDetailPage() {
 
                 const data = await res.json();
                 setCommunity(data.community);
+
+                // Fetch creator's public key for Superchats
+                if (data.community.creator_id) {
+                    const pRes = await fetch(`/api/profile?id=${data.community.creator_id}`);
+                    const pData = await pRes.json();
+                    if (pData.profile) setCreatorWallet(pData.profile.public_key);
+                }
+
+                // Fetch stream status
+                const sRes = await fetch(`/api/streams/status?room=${data.community.id}`);
+                const sData = await sRes.json();
+                if (sData.stream) setStreamStatus(sData.stream.status);
+
             } catch (error) {
                 console.error(error);
                 toast.error("Could not load community details");
@@ -68,6 +87,33 @@ export default function CommunityDetailPage() {
 
         if (communityName) fetchData();
     }, [communityName, connected]); // Refetch if wallet connects/auth changes
+
+    useEffect(() => {
+        if (!community?.id || !supabase) return;
+
+        const channel = supabase
+            .channel(`stream-status-${community.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'live_streams',
+                    filter: `community_id=eq.${community.id}`
+                },
+                (payload: any) => {
+                    console.log('Stream Status Change:', payload.new?.status);
+                    if (payload.new) {
+                        setStreamStatus(payload.new.status);
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [community?.id]);
 
     const handleJoin = async () => {
         if (!connected) {
@@ -189,6 +235,26 @@ export default function CommunityDetailPage() {
                             >
                                 Chat
                             </button>
+                            <button
+                                onClick={async () => {
+                                    setActiveTab("live");
+                                    // Manual re-check when entering tab
+                                    if (community?.id) {
+                                        const sRes = await fetch(`/api/streams/status?room=${community.id}`);
+                                        const sData = await sRes.json();
+                                        if (sData.stream) setStreamStatus(sData.stream.status);
+                                    }
+                                }}
+                                className={`pb-3 text-lg font-bold transition-colors flex items-center gap-2 ${activeTab === "live" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
+                            >
+                                Live
+                                {streamStatus === 'live' && (
+                                    <span className="flex h-2 w-2 relative">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+                                    </span>
+                                )}
+                            </button>
                         </div>
 
                         {activeTab === "overview" && (
@@ -212,7 +278,34 @@ export default function CommunityDetailPage() {
                                 communityId={community.id}
                                 currentWallet={publicKey?.toBase58()}
                                 isMember={community.isJoined}
+                                recipientWallet={creatorWallet}
                             />
+                        )}
+
+                        {activeTab === "live" && (
+                            <div className="space-y-6">
+                                {currentUserId === community.creator_id ? (
+                                    <BroadcasterDashboard
+                                        room={community.id}
+                                        username={publicKey?.toBase58() || "creator"}
+                                    />
+                                ) : (
+                                    streamStatus === 'live' ? (
+                                        <LiveStreamView
+                                            room={community.id}
+                                            username={publicKey?.toBase58() || `viewer-${Math.floor(Math.random() * 1000)}`}
+                                        />
+                                    ) : (
+                                        <div className="p-20 bg-white/5 border border-white/10 rounded-3xl text-center space-y-4">
+                                            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-600">
+                                                <SignalHigh size={32} />
+                                            </div>
+                                            <h3 className="text-xl font-black uppercase tracking-tighter text-gray-400">Station Offline</h3>
+                                            <p className="text-gray-600 text-xs font-bold uppercase tracking-widest">No active signals detected in this sector.</p>
+                                        </div>
+                                    )
+                                )}
+                            </div>
                         )}
 
                         <div className="flex flex-col md:flex-row gap-4">

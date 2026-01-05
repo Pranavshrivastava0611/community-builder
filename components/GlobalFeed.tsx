@@ -164,7 +164,7 @@ export default function GlobalFeed() {
 
         const channel = supabase
             .channel('global-feed-changes')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload) => {
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, async (payload: any) => {
                 const { data: fullPost } = await supabase
                     .from('posts')
                     .select(`*, author:profiles(username, avatar_url), community:communities(name, image_url), comments(count), media(file_url)`)
@@ -191,7 +191,7 @@ export default function GlobalFeed() {
                     });
                 }
             })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts' }, (payload) => {
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'posts' }, (payload: any) => {
                 setPosts(prev => prev.map(p =>
                     p.id === payload.new.id
                         ? { ...p, like_count: payload.new.like_count }

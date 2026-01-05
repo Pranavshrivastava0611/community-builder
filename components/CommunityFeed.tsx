@@ -74,7 +74,7 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
                     schema: 'public',
                     table: 'posts'
                 },
-                async (payload) => {
+                async (payload: any) => {
                     if (payload.new && payload.new.community_id !== communityId) return;
 
                     if (payload.eventType === 'INSERT') {

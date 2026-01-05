@@ -4,6 +4,7 @@ import { supabase } from "@/utils/supabase";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import GlowButton from "./GlowButton";
+import SuperchatModal from "./SuperchatModal";
 
 interface Message {
     id: string;
@@ -12,6 +13,9 @@ interface Message {
     message: string;
     created_at: string;
     type: "text" | "image" | "system";
+    is_superchat?: boolean;
+    superchat_amount?: number;
+    tx_signature?: string;
     user?: {
         username?: string;
         avatar_url?: string;
@@ -22,13 +26,15 @@ interface CommunityChatProps {
     communityId: string;
     currentWallet?: string;
     isMember: boolean;
+    recipientWallet?: string;
 }
 
-export default function CommunityChat({ communityId, currentWallet, isMember }: CommunityChatProps) {
+export default function CommunityChat({ communityId, currentWallet, isMember, recipientWallet }: CommunityChatProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [sending, setSending] = useState(false);
     const [realtimeStatus, setRealtimeStatus] = useState<string>("connecting");
+    const [isSuperchatOpen, setIsSuperchatOpen] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
     const pendingFetchIds = useRef<Set<string>>(new Set());
     const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -164,7 +170,8 @@ export default function CommunityChat({ communityId, currentWallet, isMember }: 
                 body: JSON.stringify({
                     communityId,
                     messages: messagesToFlush,
-                    type: "text"
+                    type: "text",
+                    is_superchat: false
                 })
             });
 
@@ -245,22 +252,38 @@ export default function CommunityChat({ communityId, currentWallet, isMember }: 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent">
                 {messages.map((msg, idx) => {
                     const isOwn = currentWallet === msg.wallet || msg.user_id === "me";
+                    const isSuper = msg.is_superchat;
+
                     return (
-                        <div key={msg.id || idx} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-                            <div className={`max-w-[85%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
-                                <div className={`px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm ${isOwn
-                                    ? "bg-orange-600/20 border border-orange-500/30 text-white rounded-tr-sm"
-                                    : "bg-white/10 border border-white/5 text-gray-200 rounded-tl-sm"
-                                    }`}>
-                                    {msg.message}
+                        <div key={msg.id || idx} className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+                            {isSuper && (
+                                <div className="flex items-center gap-2 mb-1 px-2">
+                                    <div className="w-4 h-4 rounded-full bg-yellow-500 flex items-center justify-center">
+                                        <svg className="w-2.5 h-2.5 text-black" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-yellow-500">Superchat • {msg.superchat_amount} SOL</span>
                                 </div>
-                                <div className="mt-1 text-[9px] text-gray-600 font-mono px-1 flex gap-2">
-                                    <span className={isOwn ? "text-orange-400/50" : "text-gray-500"}>
-                                        {msg.user?.username || (msg.wallet ? `${msg.wallet.slice(0, 4)}...${msg.wallet.slice(-4)}` : "Anonym")}
-                                    </span>
-                                    <span suppressHydrationWarning className="opacity-50">
-                                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                    </span>
+                            )}
+                            <div className={`flex ${isOwn ? "justify-end" : "justify-start"} w-full`}>
+                                <div className={`max-w-[85%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+                                    <div className={`px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed shadow-sm transition-all ${isSuper
+                                        ? "bg-gradient-to-br from-yellow-500/20 to-orange-500/20 border-2 border-yellow-500/40 text-white font-bold ring-4 ring-yellow-500/5"
+                                        : isOwn
+                                            ? "bg-orange-600/20 border border-orange-500/30 text-white rounded-tr-sm"
+                                            : "bg-white/10 border border-white/5 text-gray-200 rounded-tl-sm"
+                                        }`}>
+                                        {msg.message}
+                                    </div>
+                                    <div className="mt-1 text-[9px] text-gray-600 font-mono px-1 flex gap-2">
+                                        <span className={isOwn ? "text-orange-400/50" : "text-gray-500"}>
+                                            {msg.user?.username || (msg.wallet ? `${msg.wallet.slice(0, 4)}...${msg.wallet.slice(-4)}` : "Anonym")}
+                                        </span>
+                                        <span suppressHydrationWarning className="opacity-50">
+                                            {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -288,9 +311,25 @@ export default function CommunityChat({ communityId, currentWallet, isMember }: 
                         <GlowButton type="submit" disabled={sending || !newMessage.trim()} className="px-5 py-2.5 text-xs">
                             Send
                         </GlowButton>
+                        <button
+                            type="button"
+                            onClick={() => setIsSuperchatOpen(true)}
+                            className="p-2.5 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-500 hover:bg-yellow-500/20 transition-all shadow-[0_0_15px_rgba(234,179,8,0.1)]"
+                        >
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                        </button>
                     </form>
                 )}
             </div>
+
+            <SuperchatModal
+                isOpen={isSuperchatOpen}
+                onClose={() => setIsSuperchatOpen(false)}
+                communityId={communityId}
+                recipientWallet={recipientWallet || ""}
+            />
         </div>
     );
 }
