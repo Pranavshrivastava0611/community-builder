@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Body Parser
-    const { communityId, content, imageUrl } = await req.json();
+    const { communityId, content, imageUrl, tags, isNsfw } = await req.json();
 
     if (!communityId || (!content?.trim() && !imageUrl)) {
         return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
@@ -96,7 +96,9 @@ export async function POST(req: Request) {
             community_id: communityId,
             author_id: userId,
             content,
-            post_type: imageUrl ? 'image' : 'text'
+            post_type: imageUrl ? 'image' : 'text',
+            tags: tags || [],
+            is_nsfw: isNsfw || false
         })
         .select()
         .single();

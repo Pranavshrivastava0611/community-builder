@@ -124,17 +124,17 @@ export default function Home() {
       <div className="absolute bottom-0 right-0 w-[800px] h-[600px] bg-purple-900/10 rounded-full blur-[100px] pointer-events-none opacity-40"></div>
 
       {/* Header */}
-      <header className="w-full px-8 py-6 flex justify-between items-center border-b border-white/5 bg-black/30 backdrop-blur-md sticky top-0 z-50">
-        <h1 className="text-2xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
+      <header className="w-full px-4 md:px-8 py-4 md:py-6 flex flex-col md:flex-row justify-between items-center gap-4 border-b border-white/5 bg-black/30 backdrop-blur-md sticky top-0 z-50">
+        <h1 className="text-xl md:text-2xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-gray-400">
           SOLANA<span className="text-orange-500">COMMUNITY</span>
         </h1>
-        <div className="flex items-center gap-4">
-          <div className="scale-90 opacity-90 hover:opacity-100 transition-opacity">
+        <div className="flex flex-wrap justify-center items-center gap-2 md:gap-4">
+          <div className="scale-75 md:scale-90 opacity-90 hover:opacity-100 transition-opacity">
             <WalletMultiButton />
           </div>
           {connected && authToken && (
             <Link href="/profile" passHref>
-              <button className="px-5 py-2 text-sm bg-white/5 border border-white/10 text-white font-medium rounded-full hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300">
+              <button className="px-4 md:px-5 py-1.5 md:py-2 text-xs md:text-sm bg-white/5 border border-white/10 text-white font-medium rounded-full hover:bg-white/10 hover:border-orange-500/30 transition-all duration-300">
                 Profile
               </button>
             </Link>
@@ -142,12 +142,12 @@ export default function Home() {
           {connected && authToken && (
             <button
               onClick={handleLogout}
-              className="px-5 py-2 text-sm bg-transparent border border-white/10 text-gray-400 rounded-full hover:text-white hover:border-white/30 transition-all duration-300"
+              className="px-4 md:px-5 py-1.5 md:py-2 text-xs md:text-sm bg-transparent border border-white/10 text-gray-400 rounded-full hover:text-white hover:border-white/30 transition-all duration-300"
             >
               Logout
             </button>
           )}
-          <div className="scale-90 opacity-70 hover:opacity-100 transition-opacity">
+          <div className="scale-75 md:scale-90 opacity-70 hover:opacity-100 transition-opacity">
             <WalletDisconnectButton />
           </div>
         </div>
@@ -163,12 +163,12 @@ export default function Home() {
             Live on Mainnet
           </div>
 
-          <h2 className="text-6xl md:text-8xl font-black mb-6 leading-none tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-gray-500">
+          <h2 className="text-4xl sm:text-6xl md:text-8xl font-black mb-6 leading-tight md:leading-none tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-white to-gray-500">
             BUILD THE <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-200">FUTURE</span>
           </h2>
 
-          <p className="text-lg md:text-xl max-w-2xl mb-12 text-gray-400 leading-relaxed font-light">
+          <p className="text-base md:text-xl max-w-2xl mb-8 md:mb-12 text-gray-400 leading-relaxed font-light px-4 md:px-0">
             Join the fastest growing ecosystem of developers and creators. <br className="hidden md:block" /> Connect, collaborate, and launch your next big idea on Solana.
           </p>
 

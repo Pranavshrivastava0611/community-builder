@@ -12,6 +12,8 @@ interface Post {
     user_id: string;
     content: string;
     image_url?: string;
+    is_nsfw?: boolean;
+    tags?: string[];
     created_at: string;
     like_count: number;
     comment_count: number;
@@ -58,6 +60,8 @@ export default function FeedPost({ post: initialPost, onLikeToggle, onDetailView
     const [editPostContent, setEditPostContent] = useState(post.content);
     const [showOptions, setShowOptions] = useState(false);
     const [isDeleted, setIsDeleted] = useState(false);
+    const [isRevealed, setIsRevealed] = useState(false);
+    const [showNsfwConfirm, setShowNsfwConfirm] = useState(false);
 
     useEffect(() => {
         const token = localStorage.getItem("authToken");
@@ -300,33 +304,71 @@ export default function FeedPost({ post: initialPost, onLikeToggle, onDetailView
             {post.image_url ? (
                 <Link
                     href={`/post/${post.id}`}
-                    onClick={handleDetailClick}
-                    className="w-full aspect-[4/5] sm:aspect-square bg-neutral-900 rounded-sm border border-white/5 overflow-hidden mb-3 block cursor-pointer group"
+                    onClick={(e) => {
+                        if (post.is_nsfw && !isRevealed) {
+                            e.preventDefault();
+                            setShowNsfwConfirm(true);
+                        } else {
+                            handleDetailClick(e);
+                        }
+                    }}
+                    className={`w-full aspect-[4/5] sm:aspect-square bg-neutral-900 rounded-sm border border-white/5 overflow-hidden mb-3 block cursor-pointer group relative ${post.is_nsfw && !isRevealed ? 'overflow-hidden' : ''}`}
                 >
-                    <img src={post.image_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                </Link>
-            ) : (
-                <Link
-                    href={`/post/${post.id}`}
-                    onClick={handleDetailClick}
-                    className="w-full p-10 bg-gradient-to-br from-neutral-900 to-black border border-white/5 rounded-sm mb-3 block cursor-pointer group hover:border-orange-500/30 transition-colors"
-                >
-                    {isEditingPost ? (
-                        <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
-                            <textarea
-                                value={editPostContent}
-                                onChange={e => setEditPostContent(e.target.value)}
-                                className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white resize-none focus:outline-none focus:border-orange-500/50"
-                            />
-                            <div className="flex gap-2">
-                                <button onClick={handleEditPost} className="bg-orange-500 text-black font-black px-4 py-2 rounded-lg text-sm">Save</button>
-                                <button onClick={() => setIsEditingPost(false)} className="bg-white/5 text-white px-4 py-2 rounded-lg text-sm">Cancel</button>
+                    <img src={post.image_url} alt="" className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-700 ${post.is_nsfw && !isRevealed ? 'blur-[40px] grayscale brightness-50' : ''}`} />
+
+                    {post.is_nsfw && !isRevealed && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/40">
+                            <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/50 flex items-center justify-center mb-4">
+                                <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                             </div>
+                            <h4 className="text-xl font-black text-white uppercase tracking-tighter mb-2">Sensitive Content</h4>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest max-w-[200px]">Content marked as NSFW. Confirm your identity to view.</p>
+                            <button className="mt-6 px-6 py-2 bg-white text-black text-[10px] font-black uppercase tracking-widest rounded-full hover:bg-orange-500 hover:text-white transition-all">View Signal</button>
                         </div>
-                    ) : (
-                        <p className="text-lg font-medium tracking-tight whitespace-pre-wrap group-hover:text-orange-500 transition-colors font-sans">{post.content}</p>
                     )}
                 </Link>
+            ) : (
+                <div className="w-full relative">
+                    <Link
+                        href={`/post/${post.id}`}
+                        onClick={(e) => {
+                            if (post.is_nsfw && !isRevealed) {
+                                e.preventDefault();
+                                setShowNsfwConfirm(true);
+                            } else {
+                                handleDetailClick(e);
+                            }
+                        }}
+                        className={`w-full p-10 bg-gradient-to-br from-neutral-900 to-black border border-white/5 rounded-sm mb-3 block cursor-pointer group hover:border-orange-500/30 transition-colors ${post.is_nsfw && !isRevealed ? 'overflow-hidden' : ''}`}
+                    >
+                        {isEditingPost ? (
+                            <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
+                                <textarea
+                                    value={editPostContent}
+                                    onChange={e => setEditPostContent(e.target.value)}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white resize-none focus:outline-none focus:border-orange-500/50"
+                                />
+                                <div className="flex gap-2">
+                                    <button onClick={handleEditPost} className="bg-orange-500 text-black font-black px-4 py-2 rounded-lg text-sm">Save</button>
+                                    <button onClick={() => setIsEditingPost(false)} className="bg-white/5 text-white px-4 py-2 rounded-lg text-sm">Cancel</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className={`text-lg font-medium tracking-tight whitespace-pre-wrap group-hover:text-orange-500 transition-all font-sans ${post.is_nsfw && !isRevealed ? 'blur-md opacity-20 select-none' : ''}`}>
+                                {post.content}
+                            </p>
+                        )}
+                    </Link>
+
+                    {post.is_nsfw && !isRevealed && !isEditingPost && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center pointer-events-none">
+                            <div className="bg-black/60 backdrop-blur-md border border-white/10 p-5 rounded-2xl flex flex-col items-center gap-3">
+                                <span className="text-[9px] font-black bg-red-600 px-2 py-0.5 rounded text-white tracking-[0.2em]">NSFW</span>
+                                <span className="text-white text-xs font-bold">Signal Encrypted</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* Action Bar */}
@@ -373,12 +415,17 @@ export default function FeedPost({ post: initialPost, onLikeToggle, onDetailView
                     )}
                 </div>
                 {post.community && (
-                    <div className="pt-1">
+                    <div className="pt-2 flex flex-wrap items-center gap-2">
                         <Link href={`/communities/${post.community.name}`}>
-                            <span className="text-[10px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full hover:bg-orange-500/20 transition-colors cursor-pointer">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/10 px-2 py-1 rounded-full hover:bg-orange-500/20 transition-colors cursor-pointer border border-orange-500/20">
                                 {post.community.name}
                             </span>
                         </Link>
+                        {post.tags && post.tags.map(tag => (
+                            <span key={tag} className="text-[8px] font-black uppercase tracking-tighter text-gray-500 bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                                #{tag}
+                            </span>
+                        ))}
                     </div>
                 )}
                 {count > 0 && (
@@ -430,6 +477,39 @@ export default function FeedPost({ post: initialPost, onLikeToggle, onDetailView
                             <div className="flex flex-col">
                                 <button onClick={confirmDelete} className="w-full py-4 text-red-500 font-black text-sm hover:bg-red-500/5 transition-colors border-b border-white/5">Delete</button>
                                 <button onClick={() => setItemToDelete(null)} className="w-full py-4 text-white font-bold text-sm hover:bg-white/5 transition-colors">Cancel</button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            {/* NSFW Confirmation Modal */}
+            <AnimatePresence>
+                {showNsfwConfirm && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowNsfwConfirm(false)} className="absolute inset-0 bg-black/95 backdrop-blur-2xl" />
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative w-full max-w-sm bg-[#0a0a0a] border border-red-500/20 rounded-[32px] overflow-hidden shadow-[0_0_50px_rgba(239,68,68,0.1)]">
+                            <div className="p-8 text-center">
+                                <div className="w-16 h-16 bg-red-500/10 rounded-3xl flex items-center justify-center mx-auto mb-6 border border-red-500/20">
+                                    <span className="text-xl font-black text-red-500">18+</span>
+                                </div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tighter mb-4">Neural Warning</h3>
+                                <p className="text-gray-400 text-xs font-medium leading-relaxed uppercase tracking-wider mb-8">
+                                    This signal contains adult themes. Accessing this sector confirms you are of legal age.
+                                </p>
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => { setIsRevealed(true); setShowNsfwConfirm(false); }}
+                                        className="w-full py-4 bg-white text-black font-black uppercase tracking-widest text-[10px] rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-xl active:scale-95"
+                                    >
+                                        I am 18+ (Reveal Signal)
+                                    </button>
+                                    <button
+                                        onClick={() => setShowNsfwConfirm(false)}
+                                        className="w-full py-4 bg-white/5 text-gray-400 font-bold uppercase tracking-widest text-[9px] rounded-2xl hover:bg-white/10 transition-all"
+                                    >
+                                        Return to Nexus
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </div>

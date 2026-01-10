@@ -68,6 +68,8 @@ export async function GET(req: Request) {
         comment_count,
         author_id,
         community_id,
+        tags,
+        is_nsfw,
         author:profiles(username, avatar_url),
         community:communities(name, image_url, description),
         media(file_url)

@@ -12,6 +12,8 @@ interface Post {
     user_id: string;
     content: string;
     image_url?: string;
+    is_nsfw?: boolean;
+    tags?: string[];
     created_at: string;
     like_count: number;
     comment_count: number;
@@ -37,6 +39,7 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
     const [realtimeStatus, setRealtimeStatus] = useState<string>("connecting");
     const [selectedPost, setSelectedPost] = useState<Post | null>(null);
     const [isPostModalOpen, setIsPostModalOpen] = useState(false);
+    const [activeFilter, setActiveFilter] = useState<string>("ALL");
 
     useEffect(() => {
         async function fetchFeed() {
@@ -181,15 +184,32 @@ export default function CommunityFeed({ communityId, isMember }: CommunityFeedPr
 
             <CreatePost communityId={communityId} isMember={isMember} onPostCreated={handlePostCreated} />
 
+            {/* Tag Filter Chips */}
+            {posts.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+                    {["ALL", ...Array.from(new Set(posts.flatMap(p => p.tags || [])))].map(tag => (
+                        <button
+                            key={tag}
+                            onClick={() => setActiveFilter(tag)}
+                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${activeFilter === tag ? 'bg-orange-500 border-orange-400 text-black shadow-lg shadow-orange-500/20' : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20 hover:text-white'}`}
+                        >
+                            {tag}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             <div className="space-y-4">
-                {posts.map(post => (
-                    <FeedPost
-                        key={post.id}
-                        post={post}
-                        onLikeToggle={handleLikeToggle}
-                        onDetailView={handleDetailView}
-                    />
-                ))}
+                {posts
+                    .filter(p => activeFilter === "ALL" || p.tags?.includes(activeFilter))
+                    .map(post => (
+                        <FeedPost
+                            key={post.id}
+                            post={post}
+                            onLikeToggle={handleLikeToggle}
+                            onDetailView={handleDetailView}
+                        />
+                    ))}
                 {posts.length === 0 && (
                     <div className="text-center py-20 bg-white/5 rounded-3xl border border-white/5 border-dashed">
                         <p className="text-gray-500 font-bold italic">No signals yet. Start the chain!</p>

@@ -41,6 +41,7 @@ export async function POST(req: Request) {
     // 2. Parse Body
     const { 
         communityId, 
+        roomId = null,
         message, 
         messages, 
         type = 'text',
@@ -70,6 +71,7 @@ export async function POST(req: Request) {
     const messagesToInsert = messages 
         ? messages.map((m: string) => ({
             community_id: communityId,
+            room_id: roomId,
             user_id: userId,
             wallet: wallet || "Unknown",
             message: m,
@@ -81,6 +83,7 @@ export async function POST(req: Request) {
         }))
         : [{
             community_id: communityId,
+            room_id: roomId,
             user_id: userId,
             wallet: wallet || "Unknown",
             message,

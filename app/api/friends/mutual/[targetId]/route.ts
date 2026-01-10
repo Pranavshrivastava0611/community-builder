@@ -46,11 +46,11 @@ export async function GET(
 
     if (mutualIds.length === 0) return NextResponse.json({ mutualFriends: [], totalCount: 0 });
 
-    // 4. Fetch Profiles for first 3 mutual friends
+    // 4. Fetch Profiles for all mutual friends
     const { data: profiles } = await supabaseAdmin
         .from("profiles")
         .select("id, username, avatar_url")
-        .in("id", mutualIds.slice(0, 3));
+        .in("id", mutualIds);
 
     return NextResponse.json({ 
         mutualFriends: profiles || [], 

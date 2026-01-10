@@ -13,14 +13,14 @@ interface SuperchatEvent {
     message: string;
 }
 
-export default function SuperchatOverlay({ communityId }: { communityId: string }) {
+export default function SuperchatOverlay({ communityId, roomId }: { communityId: string, roomId?: string }) {
     const [activeSuperchats, setActiveSuperchats] = useState<SuperchatEvent[]>([]);
 
     useEffect(() => {
         if (!communityId || !supabase) return;
 
         const channel = supabase
-            .channel(`superchat-overlay-${communityId}`)
+            .channel(`superchat-overlay-${communityId}-${roomId || 'global'}`)
             .on(
                 'postgres_changes',
                 {
@@ -31,6 +31,10 @@ export default function SuperchatOverlay({ communityId }: { communityId: string 
                 },
                 (payload: any) => {
                     const msg = payload.new;
+                    // Filter by roomId
+                    if (roomId && msg.room_id !== roomId) return;
+                    if (!roomId && msg.room_id) return;
+
                     if (msg.is_superchat) {
                         const newEvent: SuperchatEvent = {
                             id: msg.id,

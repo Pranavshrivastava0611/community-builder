@@ -411,6 +411,8 @@ export default function BroadcasterDashboard({ room, username }: BroadcasterDash
         );
     }
 
+    const uniqueRoom = `${room}-${username}`;
+
     return (
         <div className="space-y-4 md:space-y-6 flex flex-col h-full animate-in fade-in duration-700">
             <div className="relative flex-1 bg-black rounded-[24px] md:rounded-[48px] overflow-hidden border border-white/5 shadow-2xl">
@@ -426,7 +428,7 @@ export default function BroadcasterDashboard({ room, username }: BroadcasterDash
                     <BroadcasterConference onEnd={endStream} />
                     <RoomAudioRenderer />
                     <StreamStats onStatsChange={setViewerCount} />
-                    <SuperchatOverlay communityId={room} />
+                    <SuperchatOverlay communityId={room} roomId={uniqueRoom} />
                 </LiveKitRoom>
             </div>
 

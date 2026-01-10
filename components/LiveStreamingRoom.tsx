@@ -87,9 +87,9 @@ export default function LiveStreamingRoom({
                 </div>
 
                 {/* Simplified Metadata */}
-                <div className="mt-4 flex items-center justify-between border-b border-white/5 pb-4">
-                    <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-orange-500 to-rose-600 p-[1px]">
+                <div className="mt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/5 pb-4 gap-4">
+                    <div className="flex items-center gap-3 md:gap-4">
+                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-tr from-orange-500 to-rose-600 p-[1px]">
                             <div className="w-full h-full rounded-full bg-black overflow-hidden">
                                 <img
                                     src={community.image_url || `https://api.dicebear.com/7.x/identicon/svg?seed=${community.name}`}
@@ -99,8 +99,8 @@ export default function LiveStreamingRoom({
                             </div>
                         </div>
                         <div>
-                            <h3 className="text-xs font-black text-white uppercase">{community.name}</h3>
-                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{community.members} Transmitters</p>
+                            <h3 className="text-[10px] md:text-xs font-black text-white uppercase">{community.name}</h3>
+                            <p className="text-[8px] md:text-[9px] text-gray-500 font-bold uppercase tracking-widest">{community.members} Transmitters</p>
                         </div>
                     </div>
 
@@ -108,7 +108,7 @@ export default function LiveStreamingRoom({
                         <GlowButton
                             onClick={() => setIsSuperchatOpen(true)}
                             disabled={!recipientWallet}
-                            className="px-6 py-2 bg-yellow-500 border-none text-black text-[10px] font-black uppercase tracking-widest flex items-center gap-2"
+                            className="w-full sm:w-auto px-6 py-2.5 md:py-2 bg-yellow-500 border-none text-black text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2"
                         >
                             <Zap size={14} fill="currentColor" />
                             {recipientWallet ? "Superchat" : "Syncing..."}
@@ -118,10 +118,10 @@ export default function LiveStreamingRoom({
             </div>
 
             {/* Right Column: Chat Sidebar (YouTube Style) */}
-            <div className="w-full lg:w-[350px] xl:w-[400px] flex flex-col h-[400px] md:h-[500px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-24">
-                <div className="flex-1 flex flex-col bg-[#080808] border border-white/5 rounded-xl overflow-hidden shadow-2xl">
-                    <div className="p-3 border-b border-white/5 flex items-center justify-between bg-black/60">
-                        <h3 className="text-[9px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
+            <div className="w-full lg:w-[350px] xl:w-[400px] flex flex-col h-[500px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-24">
+                <div className="flex-1 flex flex-col bg-[#080808] border border-white/5 rounded-2xl md:rounded-xl overflow-hidden shadow-2xl">
+                    <div className="p-4 md:p-3 border-b border-white/5 flex items-center justify-between bg-black/60">
+                        <h3 className="text-[10px] md:text-[9px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">
                             <div className="w-1.5 h-1.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]" />
                             Live Feed
                         </h3>
@@ -130,6 +130,7 @@ export default function LiveStreamingRoom({
                     <div className="flex-1 min-h-0">
                         <CommunityChat
                             communityId={community.id}
+                            roomId={roomName || community.id} // Ensures distinct chat for different rooms
                             currentWallet={currentWallet}
                             isMember={isMember}
                             recipientWallet={recipientWallet}

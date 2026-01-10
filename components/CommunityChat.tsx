@@ -32,6 +32,7 @@ interface CommunityChatProps {
     tokenSymbol?: string;
     variant?: "default" | "sidebar";
     className?: string;
+    roomId?: string; // Optional: if provided, filters chat to this specific room
 }
 
 export default function CommunityChat({
@@ -42,7 +43,8 @@ export default function CommunityChat({
     tokenMintAddress,
     tokenSymbol,
     variant = "default",
-    className = ""
+    className = "",
+    roomId
 }: CommunityChatProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
@@ -71,7 +73,10 @@ export default function CommunityChat({
     // 1. Fetch History
     const fetchHistory = async () => {
         try {
-            const res = await fetch(`/api/chat/${communityId}`, { cache: 'no-store' });
+            const url = new URL(`/api/chat/${communityId}`, window.location.origin);
+            if (roomId) url.searchParams.set("roomId", roomId);
+
+            const res = await fetch(url.toString(), { cache: 'no-store' });
             const data = await res.json();
             if (data.messages) {
                 setMessages(data.messages);
@@ -145,6 +150,10 @@ export default function CommunityChat({
                 },
                 (payload: any) => {
                     if (payload.new && payload.new.community_id === communityId) {
+                        // Filter by roomId if present
+                        if (roomId && payload.new.room_id !== roomId) return;
+                        if (!roomId && payload.new.room_id) return;
+
                         triggerBatchFetch([payload.new.id]);
                         if (payload.new.is_superchat) {
                             toast.success(`Signal Amplified: ${payload.new.superchat_amount} ${payload.new.token_symbol || 'SOL'}!`, {
@@ -205,6 +214,7 @@ export default function CommunityChat({
                 },
                 body: JSON.stringify({
                     communityId,
+                    roomId,
                     messages: messagesToFlush,
                     type: "text",
                     is_superchat: false
@@ -428,6 +438,7 @@ export default function CommunityChat({
                 isOpen={isSuperchatOpen}
                 onClose={() => setIsSuperchatOpen(false)}
                 communityId={communityId}
+                roomId={roomId}
                 recipientWallet={recipientWallet || ""}
                 tokenMintAddress={tokenMintAddress}
                 tokenSymbol={tokenSymbol}

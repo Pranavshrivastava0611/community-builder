@@ -27,6 +27,8 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
     const [posting, setPosting] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [showImageInput, setShowImageInput] = useState(false);
+    const [tags, setTags] = useState<string[]>([]);
+    const [isNsfw, setIsNsfw] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Selector Logic
@@ -157,7 +159,9 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
                 body: JSON.stringify({
                     communityId: selectedCommunityId,
                     content,
-                    imageUrl: imageUrl.trim() || null
+                    imageUrl: imageUrl.trim() || null,
+                    tags,
+                    isNsfw
                 })
             });
 
@@ -178,6 +182,8 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
             setContent("");
             setImageUrl("");
             setShowImageInput(false);
+            setTags([]);
+            setIsNsfw(false);
             toast.success("Posted successfully!");
 
         } catch (error: any) {
@@ -277,6 +283,49 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
                             </motion.div>
                         )}
                     </AnimatePresence>
+
+                    {/* Tag Selection & NSFW Toggle */}
+                    <div className="flex flex-wrap items-center gap-3 mb-6 px-1">
+                        <div
+                            onClick={() => setIsNsfw(!isNsfw)}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-full border cursor-pointer transition-all ${isNsfw ? 'bg-red-500/20 border-red-500 text-red-500 shadow-[0_0_10px_rgba(239,68,68,0.2)]' : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                        >
+                            <span className="text-[9px] font-black uppercase tracking-widest">NSFW</span>
+                        </div>
+
+                        {["NFT", "Solana", "Meme", "Dev", "General"].map(tag => (
+                            <button
+                                key={tag}
+                                type="button"
+                                onClick={() => {
+                                    if (tags.includes(tag)) setTags(tags.filter(t => t !== tag));
+                                    else setTags([...tags, tag]);
+                                }}
+                                className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${tags.includes(tag) ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'}`}
+                            >
+                                {tag}
+                            </button>
+                        ))}
+
+                        <div className="flex items-center bg-white/5 border border-white/10 rounded-full px-3 py-1 text-[9px] focus-within:border-orange-500/50 transition-all">
+                            <span className="text-gray-600 mr-2">#</span>
+                            <input
+                                type="text"
+                                placeholder="CUSTOM"
+                                className="bg-transparent text-white font-black uppercase tracking-widest focus:outline-none w-16"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const val = e.currentTarget.value.trim().toUpperCase();
+                                        if (val && !tags.includes(val)) {
+                                            setTags([...tags, val]);
+                                            e.currentTarget.value = "";
+                                        }
+                                    }
+                                }}
+                            />
+                        </div>
+                    </div>
 
                     <div className="flex justify-between items-center bg-black/20 p-2 rounded-3xl border border-white/5 overflow-hidden relative">
                         {hasToken === false && (

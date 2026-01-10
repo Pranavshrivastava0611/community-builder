@@ -26,6 +26,7 @@ interface SuperchatModalProps {
     recipientWallet: string;
     tokenMintAddress?: string;
     tokenSymbol?: string;
+    roomId?: string;
 }
 
 export default function SuperchatModal({
@@ -34,7 +35,8 @@ export default function SuperchatModal({
     communityId,
     recipientWallet,
     tokenMintAddress,
-    tokenSymbol = "TOKEN"
+    tokenSymbol = "TOKEN",
+    roomId
 }: SuperchatModalProps) {
     const [amount, setAmount] = useState<string>("0.1");
     const [message, setMessage] = useState("");
@@ -133,6 +135,7 @@ export default function SuperchatModal({
                 },
                 body: JSON.stringify({
                     communityId,
+                    roomId,
                     messages: [message || `Sent ${amount} ${currency === 'SOL' ? 'SOL' : tokenSymbol} Superchat!`],
                     type: "text",
                     is_superchat: true,

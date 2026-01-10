@@ -144,7 +144,7 @@ export default function LiveDirectoryPage() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.1 }}
-                            className="text-6xl md:text-8xl font-black uppercase tracking-tighter leading-none"
+                            className="text-4xl sm:text-6xl md:text-8xl font-black uppercase tracking-tighter leading-[0.9]"
                         >
                             Active <span className="text-orange-500">Links</span>
                         </motion.h1>
@@ -158,20 +158,20 @@ export default function LiveDirectoryPage() {
                         </motion.p>
                     </div>
 
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4 md:gap-6 mt-6 md:mt-0">
                         <div className="flex flex-col items-end">
                             <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-1">Global Load</span>
                             <div className="flex items-center gap-2">
                                 <Activity className="text-green-500 w-4 h-4" />
-                                <span className="text-2xl font-black text-white">4.2 TB/S</span>
+                                <span className="text-xl md:text-2xl font-black text-white">4.2 TB/S</span>
                             </div>
                         </div>
-                        <div className="w-[1px] h-12 bg-white/10 hidden md:block" />
+                        <div className="w-[1px] h-12 bg-white/10" />
                         <div className="flex flex-col items-end">
                             <span className="text-[10px] text-gray-600 font-black uppercase tracking-widest mb-1">Secure Nodes</span>
                             <div className="flex items-center gap-2">
                                 <Shield className="text-blue-500 w-4 h-4" />
-                                <span className="text-2xl font-black text-white">12,042</span>
+                                <span className="text-xl md:text-2xl font-black text-white">12,042</span>
                             </div>
                         </div>
                     </div>
@@ -217,26 +217,26 @@ export default function LiveDirectoryPage() {
                     <div className="relative group p-1 flex items-center justify-center rounded-[60px] bg-gradient-to-r from-orange-500/20 via-rose-500/20 to-blue-500/20 border border-white/5 overflow-hidden">
                         <div className="absolute inset-0 bg-neutral-950/90 backdrop-blur-3xl" />
 
-                        <div className="relative z-10 w-full flex flex-col md:flex-row items-center justify-between gap-12 p-16 md:p-24">
-                            <div className="max-w-2xl">
-                                <div className="flex items-center gap-3 mb-6">
+                        <div className="relative z-10 w-full flex flex-col md:flex-row items-center justify-between gap-8 md:gap-12 p-8 md:p-24">
+                            <div className="max-w-2xl text-center md:text-left">
+                                <div className="flex items-center justify-center md:justify-start gap-3 mb-6">
                                     <Radio className="text-orange-500 w-6 h-6" />
                                     <span className="text-orange-500 font-black uppercase tracking-[0.4em] text-xs">Director Recruitment</span>
                                 </div>
-                                <h2 className="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-tight mb-8 text-white">
+                                <h2 className="text-3xl sm:text-4xl md:text-6xl font-black uppercase tracking-tighter leading-tight mb-8 text-white">
                                     Start Your Own <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-rose-500 italic">Neural Channel</span>
                                 </h2>
-                                <p className="text-gray-500 text-lg font-medium leading-relaxed mb-12">
+                                <p className="text-gray-500 text-sm md:text-lg font-medium leading-relaxed mb-12">
                                     Establish your presence. Manage high-frequency synchronization, monetize via neural Superchats, and govern your community in real-time.
                                 </p>
-                                <div className="flex flex-wrap gap-6">
+                                <div className="flex flex-wrap justify-center md:justify-start gap-4 md:gap-6">
                                     <Link href="/communities">
-                                        <button className="px-10 py-5 bg-orange-600 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-2xl hover:bg-orange-500 transition-all shadow-xl shadow-orange-600/20">
+                                        <button className="flex-1 sm:flex-none px-6 md:px-10 py-4 md:py-5 bg-orange-600 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-2xl hover:bg-orange-500 transition-all shadow-xl shadow-orange-600/20">
                                             Establish Sector
                                         </button>
                                     </Link>
-                                    <button className="px-10 py-5 bg-white/5 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-2xl border border-white/10 hover:bg-white/10 transition-all">
-                                        View Documentation
+                                    <button className="flex-1 sm:flex-none px-6 md:px-10 py-4 md:py-5 bg-white/5 text-white text-[10px] font-black uppercase tracking-[0.3em] rounded-2xl border border-white/10 hover:bg-white/10 transition-all">
+                                        Support Docs
                                     </button>
                                 </div>
                             </div>

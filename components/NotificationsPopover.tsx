@@ -84,7 +84,7 @@ export default function NotificationsPopover({ onClose }: { onClose: () => void 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="absolute left-[240px] top-0 w-80 h-screen bg-black/80 backdrop-blur-3xl border-r border-white/10 z-[60] p-6 shadow-2xl"
+            className="fixed inset-0 md:absolute md:left-[240px] md:top-0 w-full md:w-80 h-full md:h-screen bg-black/95 md:bg-black/80 backdrop-blur-3xl border-r border-white/10 z-[100] p-6 shadow-2xl overflow-y-auto"
         >
             <div className="flex items-center justify-between mb-8">
                 <h2 className="text-2xl font-black uppercase tracking-tighter">Activity</h2>

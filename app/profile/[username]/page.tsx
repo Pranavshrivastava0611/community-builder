@@ -1,12 +1,15 @@
 "use client";
 
+import FeedPost from "@/components/FeedPost";
 import FriendButton from "@/components/FriendButton";
 import GlassPanel from "@/components/GlassPanel";
 import Navbar from "@/components/Navbar";
-import { supabase } from "@/utils/supabase";
 import { AnimatePresence, motion } from "framer-motion";
+import { Grid, Layout, Share2, Users } from "lucide-react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Toaster, toast } from "react-hot-toast";
 
 interface Profile {
     id: string;
@@ -20,299 +23,315 @@ interface Profile {
 export default function UserProfilePage() {
     const params = useParams() as any;
     const username = params.username;
+
     const [profile, setProfile] = useState<Profile | null>(null);
-    const [mutualInfo, setMutualInfo] = useState<{ mutualFriends: any[], totalCount: number }>({ mutualFriends: [], totalCount: 0 });
     const [loading, setLoading] = useState(true);
-    const [karmaIncrement, setKarmaIncrement] = useState<number | null>(null);
+    const [activeTab, setActiveTab] = useState<"posts" | "stats" | "communities">("posts");
+
+    // Stats
+    const [posts, setPosts] = useState<any[]>([]);
     const [postCount, setPostCount] = useState(0);
     const [friendCount, setFriendCount] = useState(0);
+    const [mutualInfo, setMutualInfo] = useState<{ mutualFriends: any[], totalCount: number }>({ mutualFriends: [], totalCount: 0 });
+
+    // UI States
+    const [loadingFriends, setLoadingFriends] = useState(false);
+    const [showMutuals, setShowMutuals] = useState(false);
 
     useEffect(() => {
-        async function fetchProfile() {
+        async function fetchProfileData() {
             try {
                 const res = await fetch(`/api/profile?username=${username}`);
                 const data = await res.json();
                 if (data.profile) {
                     setProfile(data.profile);
-
-                    // Batch fetch all stats in parallel for better performance
-                    const token = localStorage.getItem("authToken");
                     const profileId = data.profile.id;
+                    const token = localStorage.getItem("authToken");
 
-                    const [mutualRes, postsRes, friendsRes] = await Promise.allSettled([
-                        // Mutual friends
+                    // Parallel fetch stats & posts
+                    const [statsRes, postsRes, friendsRes, mutualRes] = await Promise.allSettled([
+                        fetch(`/api/profile/stats?userId=${profileId}&stat=posts`).then(r => r.json()),
+                        fetch(`/api/feed/user?userId=${profileId}`).then(r => r.json()),
+                        fetch(`/api/profile/stats?userId=${profileId}&stat=friends`).then(r => r.json()),
                         token ? fetch(`/api/friends/mutual/${profileId}`, {
                             headers: { "Authorization": `Bearer ${token}` }
-                        }).then(r => r.json()) : Promise.resolve({ mutualFriends: [], totalCount: 0 }),
-
-                        // Post count
-                        fetch(`/api/profile/stats?userId=${profileId}&stat=posts`).then(r => r.json()),
-
-                        // Friend count
-                        fetch(`/api/profile/stats?userId=${profileId}&stat=friends`).then(r => r.json())
+                        }).then(r => r.json()) : Promise.resolve({ mutualFriends: [], totalCount: 0 })
                     ]);
 
-                    if (mutualRes.status === 'fulfilled') {
-                        setMutualInfo(mutualRes.value);
-                    }
-
-                    if (postsRes.status === 'fulfilled' && postsRes.value.count !== undefined) {
-                        setPostCount(postsRes.value.count);
-                    }
-
-                    if (friendsRes.status === 'fulfilled' && friendsRes.value.count !== undefined) {
-                        setFriendCount(friendsRes.value.count);
-                    }
+                    if (statsRes.status === 'fulfilled') setPostCount(statsRes.value.count || 0);
+                    if (postsRes.status === 'fulfilled') setPosts(postsRes.value.posts || []);
+                    if (friendsRes.status === 'fulfilled') setFriendCount(friendsRes.value.count || 0);
+                    if (mutualRes.status === 'fulfilled') setMutualInfo(mutualRes.value);
                 }
             } catch (e) {
-                console.error(e);
+                console.error("Profile sync failed:", e);
+                toast.error("Failed to sync neural profile");
             } finally {
                 setLoading(false);
             }
         }
-        fetchProfile();
+        if (username) fetchProfileData();
     }, [username]);
 
-    // Real-time karma subscription
-    useEffect(() => {
-        if (!profile?.id) return;
-
-        const channel = supabase
-            .channel(`profile-${profile.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'UPDATE',
-                    schema: 'public',
-                    table: 'profiles',
-                    filter: `id=eq.${profile.id}`
-                },
-                (payload: any) => {
-                    const newKarma = payload.new.karma;
-                    const oldKarma = profile.karma || 0;
-
-                    if (newKarma !== oldKarma) {
-                        const diff = newKarma - oldKarma;
-                        setKarmaIncrement(diff);
-                        setTimeout(() => setKarmaIncrement(null), 2000);
-
-                        setProfile(prev => prev ? { ...prev, karma: newKarma } : null);
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
+    const handleShare = async () => {
+        const shareData = {
+            title: `${profile?.username}'s Neural Identity`,
+            text: `Check out ${profile?.username} on Solana Community`,
+            url: window.location.href,
         };
-    }, [profile?.id]);
 
-    // Real-time post count subscription
-    useEffect(() => {
-        if (!profile?.id) return;
+        try {
+            if (navigator.share) {
+                await navigator.share(shareData);
+            } else {
+                await navigator.clipboard.writeText(shareData.url);
+                toast.success("Profile link synchronized to clipboard");
+            }
+        } catch (e) {
+            console.error("Sharing failed:", e);
+        }
+    };
 
-        const postsChannel = supabase
-            .channel(`posts-${profile.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'posts',
-                    filter: `author_id=eq.${profile.id}`
-                },
-                async () => {
-                    // Refetch post count
-                    const res = await fetch(`/api/profile/stats?userId=${profile.id}&stat=posts`);
-                    const data = await res.json();
-                    if (data.count !== undefined) setPostCount(data.count);
-                }
-            )
-            .subscribe();
+    // Handle Likes on Profile Posts
+    const handleLikeToggle = (postId: string, newLiked: boolean) => {
+        setPosts(prev => prev.map(p => {
+            if (p.id === postId) {
+                return {
+                    ...p,
+                    isLiked: newLiked,
+                    like_count: newLiked ? p.like_count + 1 : Math.max(0, p.like_count - 1)
+                };
+            }
+            return p;
+        }));
+    };
 
-        return () => {
-            supabase.removeChannel(postsChannel);
-        };
-    }, [profile?.id]);
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="flex flex-col items-center gap-6">
+                    <div className="w-20 h-20 border-t-2 border-orange-500 rounded-full animate-spin shadow-[0_0_20px_rgba(234,88,12,0.3)]" />
+                    <p className="text-[10px] font-black uppercase tracking-[0.5em] text-orange-500 animate-pulse">Neural Identity Syncing...</p>
+                </div>
+            </div>
+        );
+    }
 
-    // Real-time friend count subscription
-    useEffect(() => {
-        if (!profile?.id) return;
-
-        const friendshipsChannel = supabase
-            .channel(`friendships-${profile.id}`)
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'friendships',
-                    filter: `user1_id=eq.${profile.id}`
-                },
-                async () => {
-                    // Refetch friend count
-                    const res = await fetch(`/api/profile/stats?userId=${profile.id}&stat=friends`);
-                    const data = await res.json();
-                    if (data.count !== undefined) setFriendCount(data.count);
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'friendships',
-                    filter: `user2_id=eq.${profile.id}`
-                },
-                async () => {
-                    // Refetch friend count
-                    const res = await fetch(`/api/profile/stats?userId=${profile.id}&stat=friends`);
-                    const data = await res.json();
-                    if (data.count !== undefined) setFriendCount(data.count);
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(friendshipsChannel);
-        };
-    }, [profile?.id]);
-
-    if (loading) return <div className="min-h-screen bg-black flex items-center justify-center text-orange-500 font-black animate-pulse uppercase italic">Loading Identity...</div>;
-    if (!profile) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase">User Not Found</div>;
-
-    const isKarmaKing = (profile.karma || 0) >= 1000;
+    if (!profile) return <div className="min-h-screen bg-black flex items-center justify-center text-white font-black uppercase">Identity Not Found</div>;
 
     return (
-        <div className="min-h-screen bg-black text-white font-sans selection:bg-orange-500/30">
-            <style jsx global>{`
-                @keyframes rainbow-border {
-                    0% { transform: rotate(0deg); filter: hue-rotate(0deg); }
-                    100% { transform: rotate(360deg); filter: hue-rotate(360deg); }
-                }
-                .rainbow-glow {
-                    position: relative;
-                }
-                .rainbow-glow::before {
-                    content: '';
-                    position: absolute;
-                    inset: -4px;
-                    background: conic-gradient(from 0deg, #ff0000, #ff7300, #fffb00, #48ff00, #00ffd5, #002bff, #7a00ff, #ff00c8, #ff0000);
-                    border-radius: 50%;
-                    z-index: -1;
-                    animation: rainbow-border 3s linear infinite;
-                    filter: blur(8px);
-                }
-            `}</style>
+        <div className="min-h-screen bg-black text-white font-sans selection:bg-orange-500/30 overflow-x-hidden">
+            <Toaster position="bottom-right" />
             <Navbar />
 
-            <main className="max-w-4xl mx-auto pt-20 px-4">
-                <GlassPanel className="p-10 relative overflow-hidden group">
-                    {/* Background Decorative Blur */}
-                    <div className="absolute -top-20 -right-20 w-80 h-80 bg-orange-600/20 rounded-full blur-[120px] group-hover:bg-orange-600/30 transition-all duration-700" />
-
-                    <div className="flex flex-col md:flex-row items-center gap-10 relative z-10">
-                        <div className="relative">
-                            <div className={`w-40 h-40 rounded-full p-[3px] shadow-2xl transition-all duration-500 ${isKarmaKing ? 'rainbow-glow scale-110 shadow-orange-500/40' : 'bg-gradient-to-tr from-orange-400 via-rose-500 to-purple-600 shadow-orange-500/20'}`}>
-                                <div className="w-full h-full rounded-full bg-black border-4 border-black overflow-hidden relative">
-                                    {profile.avatar_url ? (
-                                        <img src={profile.avatar_url} className="w-full h-full object-cover" alt={profile.username} />
-                                    ) : (
-                                        <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`} className="w-full h-full object-cover" alt="" />
-                                    )}
-                                </div>
+            <main className="max-w-4xl mx-auto pt-24 md:pt-32 px-4 pb-20">
+                {/* Instagram Style Header */}
+                <div className="flex flex-col md:flex-row items-center md:items-start gap-10 md:gap-16 mb-16">
+                    {/* Avatar with Glow */}
+                    <div className="relative group">
+                        <div className="w-32 h-32 md:w-40 md:h-40 rounded-full p-[3px] bg-gradient-to-tr from-orange-500 via-rose-500 to-purple-600 shadow-2xl shadow-orange-500/20 group-hover:scale-105 transition-transform duration-500">
+                            <div className="w-full h-full rounded-full bg-black border-[4px] border-black overflow-hidden relative">
+                                <img
+                                    src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`}
+                                    className="w-full h-full object-cover"
+                                    alt={profile.username}
+                                />
                             </div>
-                            <div className="absolute -bottom-2 -right-2 bg-green-500 w-8 h-8 rounded-full border-4 border-black" title="Online" />
-                            {isKarmaKing && (
-                                <div className="absolute -top-4 -left-4 bg-black border border-orange-500 text-orange-500 text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter animate-bounce">
-                                    Karma King
-                                </div>
-                            )}
                         </div>
+                        {/* Status Ring */}
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 border-4 border-black rounded-full shadow-lg" />
+                    </div>
 
-                        <div className="flex-1 text-center md:text-left">
-                            <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                                <h1 className={`text-5xl font-black uppercase tracking-tighter leading-none ${isKarmaKing ? 'bg-gradient-to-r from-orange-400 via-rose-500 to-purple-600 bg-clip-text text-transparent animate-gradient-x' : ''}`}>
-                                    {profile.username}
-                                </h1>
+                    {/* Meta Info */}
+                    <div className="flex-1 space-y-6 text-center md:text-left">
+                        <div className="flex flex-col md:flex-row items-center gap-6">
+                            <h1 className="text-3xl font-black uppercase tracking-tighter text-white">
+                                {profile.username}
+                            </h1>
+                            <div className="flex gap-2">
                                 <FriendButton targetUserId={profile.id} />
+                                <button
+                                    onClick={handleShare}
+                                    className="p-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-all text-gray-400 hover:text-white"
+                                >
+                                    <Share2 size={16} />
+                                </button>
                             </div>
+                        </div>
 
-                            <div className="flex items-center justify-center md:justify-start gap-3 mb-6">
-                                <span className="px-3 py-1 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-widest text-gray-400">
-                                    {profile.public_key.slice(0, 4)}...{profile.public_key.slice(-4)}
-                                </span>
-                                <span className="w-1 h-1 bg-gray-700 rounded-full" />
-                                <span className="text-xs font-bold text-orange-500 uppercase tracking-tighter italic">Solana Identity Verified</span>
+                        {/* Counts Bar */}
+                        <div className="flex items-center justify-center md:justify-start gap-8 md:gap-12">
+                            <div className="text-center md:text-left">
+                                <span className="text-xl md:text-2xl font-black block">{postCount}</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Posts</span>
                             </div>
+                            <div className="text-center md:text-left cursor-pointer group">
+                                <span className="text-xl md:text-2xl font-black block group-hover:text-orange-500 transition-colors">{friendCount}</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Links</span>
+                            </div>
+                            <div className="text-center md:text-left">
+                                <span className="text-xl md:text-2xl font-black block text-orange-500">{profile.karma || 0}</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Karma</span>
+                            </div>
+                        </div>
 
-                            <p className="text-lg text-gray-400 font-medium leading-relaxed max-w-xl italic mb-6">
-                                "{profile.bio || "This user prefers to keep their bio an enigma."}"
+                        {/* Bio & Links */}
+                        <div className="space-y-3">
+                            <p className="text-sm font-bold text-gray-300 leading-relaxed max-w-lg">
+                                {profile.bio || "No description of this neural unit yet."}
                             </p>
+                            <div className="flex items-center justify-center md:justify-start gap-2">
+                                <span className="text-[10px] font-mono text-white/30 truncate max-w-[150px]">
+                                    {profile.public_key}
+                                </span>
+                            </div>
+                        </div>
 
-                            {mutualInfo.totalCount > 0 && (
-                                <div className="flex items-center gap-3">
-                                    <div className="flex -space-x-2">
-                                        {mutualInfo.mutualFriends.map((mf, i) => (
-                                            <div key={mf.id} className="w-8 h-8 rounded-full border-2 border-black overflow-hidden bg-neutral-900 shadow-xl">
-                                                <img src={mf.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${mf.username}`} className="w-full h-full object-cover" alt="" />
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-                                        {mutualInfo.totalCount} Mutual {mutualInfo.totalCount === 1 ? 'Friend' : 'Friends'}
-                                    </p>
+                        {/* Mutual Friends (Reddit style stack) */}
+                        {mutualInfo.totalCount > 0 && (
+                            <button
+                                onClick={() => setShowMutuals(true)}
+                                className="flex items-center justify-center md:justify-start gap-3 pt-2 hover:opacity-80 transition-opacity"
+                            >
+                                <div className="flex -space-x-3">
+                                    {mutualInfo.mutualFriends.slice(0, 3).map((mf: any) => (
+                                        <div key={mf.id} className="w-8 h-8 rounded-full border-2 border-black overflow-hidden bg-neutral-950 shadow-xl">
+                                            <img src={mf.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${mf.username}`} className="w-full h-full object-cover" alt="" />
+                                        </div>
+                                    ))}
                                 </div>
+                                <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                                    {mutualInfo.totalCount} Mutual Signals
+                                </p>
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Tabs Bar */}
+                <div className="flex items-center justify-center border-t border-white/10">
+                    <button
+                        onClick={() => setActiveTab("posts")}
+                        className={`flex items-center gap-2 py-4 px-8 border-t-2 transition-all ${activeTab === 'posts' ? 'border-orange-500 text-orange-500' : 'border-transparent text-gray-500 hover:text-white'}`}
+                    >
+                        <Grid size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">Transmission Hub</span>
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("stats")}
+                        className={`flex items-center gap-2 py-4 px-8 border-t-2 transition-all ${activeTab === 'stats' ? 'border-orange-500 text-orange-500' : 'border-transparent text-gray-500 hover:text-white'}`}
+                    >
+                        <Layout size={14} />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">Neural Specs</span>
+                    </button>
+                </div>
+
+                {/* Content Grid */}
+                <div className="mt-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    {activeTab === "posts" && (
+                        <div className="grid grid-cols-1 gap-12">
+                            {posts.length === 0 ? (
+                                <div className="py-20 text-center border border-dashed border-white/5 rounded-[40px] bg-white/[0.02]">
+                                    <Layout size={40} className="mx-auto text-gray-700 mb-6" />
+                                    <p className="text-gray-500 font-black uppercase tracking-[0.3em] text-xs">No active transmissions detected.</p>
+                                </div>
+                            ) : (
+                                posts.map(post => (
+                                    <div key={post.id} className="max-w-2xl mx-auto w-full">
+                                        <FeedPost
+                                            post={post}
+                                            onLikeToggle={handleLikeToggle}
+                                        />
+                                    </div>
+                                ))
                             )}
                         </div>
-                    </div>
+                    )}
 
-                    {/* Stats Bar */}
-                    <div className="flex gap-10 mt-12 pt-10 border-t border-white/5 relative z-10">
-                        <div className="relative">
-                            <p className={`text-2xl font-black italic ${isKarmaKing ? 'text-orange-400' : ''}`}>{profile.karma || 0}</p>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Reputation</p>
-
-                            <AnimatePresence>
-                                {karmaIncrement !== null && (
-                                    <motion.div
-                                        initial={{ opacity: 1, y: 0 }}
-                                        animate={{ opacity: 0, y: -30 }}
-                                        exit={{ opacity: 0 }}
-                                        transition={{ duration: 2 }}
-                                        className="absolute -top-8 left-0 text-green-400 font-black text-xl"
-                                    >
-                                        +{karmaIncrement}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
-                        <div>
-                            <p className="text-2xl font-black italic">{postCount}</p>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Posts</p>
-                        </div>
-                        <div>
-                            <p className="text-2xl font-black italic">{friendCount}</p>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Friends</p>
-                        </div>
-                    </div>
-                </GlassPanel>
-
-                <section className="mt-12">
-                    <h2 className="text-sm font-black uppercase tracking-widest text-gray-600 mb-6 px-2">Recent Contributions</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-30 hover:opacity-100 transition-opacity">
-                        {[1, 2, 3, 4].map(i => (
-                            <GlassPanel key={i} className="p-6 border-dashed border-white/10">
-                                <div className="h-4 w-3/4 bg-white/5 rounded-full mb-3" />
-                                <div className="h-4 w-1/2 bg-white/5 rounded-full" />
+                    {activeTab === "stats" && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <GlassPanel className="p-8 space-y-4 border-orange-500/20">
+                                <h3 className="text-xs font-black uppercase tracking-widest text-orange-500">Identity Karma</h3>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-black">{profile.karma || 0}</span>
+                                    <span className="text-[10px] text-gray-500 font-bold uppercase">Points</span>
+                                </div>
+                                <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                                    <div className="h-full bg-orange-500 w-[70%]" />
+                                </div>
+                                <p className="text-[9px] text-gray-600 font-bold uppercase tracking-widest leading-relaxed">
+                                    High Karma indicates a reliable and active community transmitter.
+                                </p>
                             </GlassPanel>
-                        ))}
-                    </div>
-                    <div className="text-center py-20">
-                        <p className="text-gray-600 font-bold italic tracking-tight">Post feed coming soon...</p>
-                    </div>
-                </section>
+
+                            <GlassPanel className="p-8 space-y-4 border-rose-500/20">
+                                <h3 className="text-xs font-black uppercase tracking-widest text-rose-500">Network Reach</h3>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-black">{friendCount}</span>
+                                    <span className="text-[10px] text-gray-500 font-bold uppercase">Active Links</span>
+                                </div>
+                                <div className="flex -space-x-2 pt-2">
+                                    {[1, 2, 3, 4, 5].map(i => (
+                                        <div key={i} className="w-8 h-8 rounded-full border-2 border-black bg-neutral-900 overflow-hidden">
+                                            <img src={`https://api.dicebear.com/7.x/identicon/svg?seed=${i + profile.id}`} alt="" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </GlassPanel>
+                        </div>
+                    )}
+                </div>
             </main>
+
+            {/* Mutuals Modal */}
+            <AnimatePresence>
+                {showMutuals && (
+                    <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setShowMutuals(false)}
+                            className="absolute inset-0 bg-black/80 backdrop-blur-md"
+                        />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                            className="relative w-full max-w-md bg-neutral-900 border border-white/10 rounded-[32px] overflow-hidden shadow-2xl"
+                        >
+                            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                                <h3 className="text-lg font-black uppercase tracking-widest text-white">Mutual Signals</h3>
+                                <button
+                                    onClick={() => setShowMutuals(false)}
+                                    className="p-2 hover:bg-white/5 rounded-xl transition-all"
+                                >
+                                    <Users size={18} className="text-gray-500" />
+                                </button>
+                            </div>
+                            <div className="p-2 max-h-[60vh] overflow-y-auto no-scrollbar">
+                                {mutualInfo.mutualFriends.map(friend => (
+                                    <Link
+                                        key={friend.id}
+                                        href={`/profile/${friend.username}`}
+                                        onClick={() => setShowMutuals(false)}
+                                        className="flex items-center gap-4 p-4 hover:bg-white/5 rounded-2xl transition-all group"
+                                    >
+                                        <div className="w-12 h-12 rounded-full border-2 border-white/10 overflow-hidden">
+                                            <img src={friend.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${friend.username}`} className="w-full h-full object-cover" alt="" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-black text-white group-hover:text-orange-500 transition-colors">{friend.username}</p>
+                                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Active Node</p>
+                                        </div>
+                                        <div className="w-2 h-2 rounded-full bg-orange-500" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
