@@ -24,6 +24,7 @@
     "form-data": "^4.0.4",
     "formidable": "^3.5.4",
     "framer-motion": "^12.23.24",
+    "ioredis": "^5.9.1",
     "jsonwebtoken": "^9.0.2",
     "livekit-client": "^2.16.1",
     "livekit-server-sdk": "^2.15.0",

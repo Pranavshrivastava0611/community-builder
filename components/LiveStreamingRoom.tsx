@@ -17,6 +17,7 @@ interface LiveStreamingRoomProps {
     tokenSymbol?: string;
     isMember: boolean;
     streamStatus: 'live' | 'idle';
+    roomName?: string;
 }
 
 export default function LiveStreamingRoom({
@@ -27,7 +28,8 @@ export default function LiveStreamingRoom({
     tokenMintAddress,
     tokenSymbol,
     isMember,
-    streamStatus
+    streamStatus,
+    roomName
 }: LiveStreamingRoomProps) {
     const [isSuperchatOpen, setIsSuperchatOpen] = useState(false);
     const [wantsToStream, setWantsToStream] = useState(false);
@@ -38,9 +40,9 @@ export default function LiveStreamingRoom({
     return (
         <div className="max-w-[1800px] mx-auto flex flex-col lg:flex-row gap-4 h-full min-h-[80vh]">
             {/* Left Column: Video & Metadata */}
-            <div className="flex-1 flex flex-col gap-4">
+            <div className="flex-1 flex flex-col gap-4 min-w-0">
                 {/* Video Container */}
-                <div className="relative aspect-video bg-black rounded-xl overflow-hidden border border-white/5 shadow-2xl group">
+                <div className={`relative bg-black rounded-xl overflow-hidden border border-white/5 shadow-2xl group ${isBroadcaster || wantsToStream ? "" : "aspect-video"}`}>
                     {(isBroadcaster || wantsToStream) ? (
                         <BroadcasterDashboard
                             room={community.id}
@@ -48,7 +50,7 @@ export default function LiveStreamingRoom({
                         />
                     ) : isActuallyLive ? (
                         <LiveStreamView
-                            room={community.id}
+                            room={roomName || community.id}
                             username={currentWallet || `viewer-${Math.floor(Math.random() * 1000)}`}
                         />
                     ) : (
