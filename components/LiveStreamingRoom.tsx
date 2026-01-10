@@ -118,7 +118,7 @@ export default function LiveStreamingRoom({
             </div>
 
             {/* Right Column: Chat Sidebar (YouTube Style) */}
-            <div className="w-full lg:w-[350px] flex flex-col h-[500px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-24">
+            <div className="w-full lg:w-[350px] xl:w-[400px] flex flex-col h-[400px] md:h-[500px] lg:h-[calc(100vh-140px)] lg:sticky lg:top-24">
                 <div className="flex-1 flex flex-col bg-[#080808] border border-white/5 rounded-xl overflow-hidden shadow-2xl">
                     <div className="p-3 border-b border-white/5 flex items-center justify-between bg-black/60">
                         <h3 className="text-[9px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-2">

@@ -17,7 +17,6 @@ import {
     MicOff,
     MonitorUp,
     Radio,
-    Settings,
     Users,
     Video,
     VideoOff,
@@ -104,39 +103,35 @@ function BroadcasterConference({ onEnd }: { onEnd: () => void }) {
                 </div>
 
                 {/* Quick Controls HUD */}
-                <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/40 backdrop-blur-3xl p-3 rounded-[32px] border border-white/10 shadow-2xl transition-all hover:bg-black/60 group-hover/preview:scale-105">
+                <div className="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-4 bg-black/40 backdrop-blur-3xl p-2 md:p-3 rounded-full border border-white/10 shadow-2xl transition-all hover:bg-black/60 group-hover/preview:scale-105">
                     <button
                         onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-                        className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isMicrophoneEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]'}`}
+                        className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${isMicrophoneEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]'}`}
                     >
-                        {isMicrophoneEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+                        {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
                     </button>
 
                     <button
                         onClick={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
-                        className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isCameraEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]'}`}
+                        className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${isCameraEnabled ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]'}`}
                     >
-                        {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+                        {isCameraEnabled ? <Video size={18} /> : <VideoOff size={18} />}
                     </button>
 
-                    <div className="w-1 h-8 bg-white/10 mx-1" />
+                    <div className="w-[1px] h-6 bg-white/10 mx-1" />
 
                     <button
                         onClick={() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
-                        className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isScreenShareEnabled ? 'bg-orange-500 text-black shadow-[0_0_20px_rgba(249,115,22,0.4)]' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+                        className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center transition-all ${isScreenShareEnabled ? 'bg-orange-500 text-black shadow-[0_0_20px_rgba(249,115,22,0.4)]' : 'bg-white/10 hover:bg-white/20 text-white'}`}
                     >
-                        <MonitorUp size={20} />
-                    </button>
-
-                    <button className="w-14 h-14 rounded-full flex items-center justify-center bg-white/10 hover:bg-white/20 text-white transition-all">
-                        <Settings size={20} />
+                        <MonitorUp size={18} />
                     </button>
 
                     <button
                         onClick={onEnd}
-                        className="px-8 h-14 bg-red-600 hover:bg-red-500 text-white rounded-[24px] font-black uppercase tracking-widest text-[10px] transition-all shadow-lg ml-2"
+                        className="px-4 md:px-8 h-10 md:h-14 bg-red-600 hover:bg-red-500 text-white rounded-full font-black uppercase tracking-widest text-[8px] md:text-[10px] transition-all shadow-lg ml-1"
                     >
-                        Close Link
+                        End
                     </button>
                 </div>
             </div>
@@ -146,38 +141,38 @@ function BroadcasterConference({ onEnd }: { onEnd: () => void }) {
 
 function SharedMetrics({ revenue, viewerCount }: { revenue: number; viewerCount: number }) {
     return (
-        <div className="grid grid-cols-2 gap-6 h-28">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 min-h-[7rem]">
             <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="bg-neutral-900 border border-white/5 p-6 rounded-[32px] flex flex-col justify-center gap-2 group hover:border-orange-500/30 transition-all shadow-xl"
+                className="bg-neutral-900 border border-white/5 p-5 md:p-6 rounded-[24px] md:rounded-[32px] flex flex-col justify-center gap-2 group hover:border-orange-500/30 transition-all shadow-xl"
             >
                 <div className="flex items-center justify-between">
                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Live Revenue</p>
                     <Zap size={14} className="text-yellow-500 animate-pulse" />
                 </div>
                 <div className="flex items-baseline gap-2">
-                    <p className="text-white font-black text-3xl tracking-tighter">
+                    <p className="text-white font-black text-2xl md:text-3xl tracking-tighter">
                         {revenue.toFixed(2)}
                     </p>
-                    <span className="text-gray-500 text-xs font-bold uppercase">SOL</span>
+                    <span className="text-gray-500 text-[10px] md:text-sm font-bold uppercase">SOL</span>
                 </div>
             </motion.div>
 
             <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="bg-neutral-900 border border-white/5 p-6 rounded-[32px] flex flex-col justify-center gap-2 group hover:border-blue-500/30 transition-all shadow-xl"
+                className="bg-neutral-900 border border-white/5 p-5 md:p-6 rounded-[24px] md:rounded-[32px] flex flex-col justify-center gap-2 group hover:border-blue-500/30 transition-all shadow-xl"
             >
                 <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Current Audience</p>
+                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Audience</p>
                     <Users size={14} className="text-blue-500" />
                 </div>
                 <div className="flex items-baseline gap-2">
-                    <p className="text-white font-black text-3xl tracking-tighter">
+                    <p className="text-white font-black text-2xl md:text-3xl tracking-tighter">
                         {viewerCount}
                     </p>
-                    <span className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Transmitters</span>
+                    <span className="text-gray-500 text-[9px] md:text-[10px] uppercase font-bold tracking-widest">Transmitters</span>
                 </div>
             </motion.div>
         </div>
@@ -321,39 +316,39 @@ export default function BroadcasterDashboard({ room, username }: BroadcasterDash
 
     if (!isLive) {
         return (
-            <div className="relative group overflow-hidden h-full min-h-[550px] flex flex-col">
+            <div className="relative group overflow-hidden h-full min-h-[450px] md:min-h-[550px] flex flex-col">
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-600/10 to-rose-600/10 opacity-50 group-hover:opacity-100 transition-opacity duration-1000" />
-                <div className="h-full flex flex-col items-center justify-center p-12 bg-neutral-950 border border-white/5 rounded-[48px] text-center space-y-10 relative z-10">
+                <div className="h-full flex flex-col items-center justify-center p-6 md:p-12 bg-neutral-950 border border-white/5 rounded-[24px] md:rounded-[48px] text-center space-y-8 md:space-y-10 relative z-10">
                     <div className="relative">
-                        <div className="absolute inset-0 bg-orange-500/20 blur-[40px] rounded-full" />
-                        <div className="w-32 h-32 bg-orange-500/10 rounded-[40px] flex items-center justify-center mx-auto mb-8 border border-orange-500/20 shadow-2xl relative z-10 group-hover:rotate-12 transition-transform duration-500">
-                            <Radio className="w-12 h-12 text-orange-500" />
+                        <div className="absolute inset-0 bg-orange-500/20 blur-[30px] rounded-full" />
+                        <div className="w-20 h-20 md:w-32 md:h-32 bg-orange-500/10 rounded-[20px] md:rounded-[40px] flex items-center justify-center mx-auto mb-4 md:mb-8 border border-orange-500/20 shadow-2xl relative z-10 group-hover:rotate-12 transition-transform duration-500">
+                            <Radio className="w-8 h-8 md:w-12 md:h-12 text-orange-500" />
                         </div>
                     </div>
                     <div className="max-w-md">
-                        <h2 className="text-4xl font-black uppercase tracking-tighter text-white mb-4">Transmission Sector</h2>
-                        <p className="text-gray-500 text-[11px] font-bold uppercase tracking-[0.3em] leading-relaxed">
-                            Select your broadcast methodology. browser-based for quick entry or OBS for professional high-stability uplinks.
+                        <h2 className="text-2xl md:text-4xl font-black uppercase tracking-tighter text-white mb-3 md:mb-4">Transmission</h2>
+                        <p className="text-gray-500 text-[9px] md:text-[11px] font-bold uppercase tracking-[0.2em] md:tracking-[0.3em] leading-relaxed px-4">
+                            Select broadcast methodology. Browser sync or professional OBS uplink.
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl px-4">
-                        <div className="bg-white/5 border border-white/10 p-8 rounded-[32px] hover:border-orange-500/30 transition-all flex flex-col justify-between group/opt">
-                            <div className="text-left mb-6">
-                                <h3 className="text-white font-black uppercase tracking-widest text-sm mb-2">Studio Uplink</h3>
-                                <p className="text-gray-500 text-[9px] uppercase font-bold tracking-widest">WebRTC Browser Broadcast</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl px-2 md:px-4">
+                        <div className="bg-white/5 border border-white/10 p-6 md:p-8 rounded-[24px] md:rounded-[32px] hover:border-orange-500/30 transition-all flex flex-col justify-between group/opt">
+                            <div className="text-left mb-4 md:mb-6">
+                                <h3 className="text-white font-black uppercase tracking-widest text-[12px] md:text-sm mb-1 md:mb-2">Studio Sync</h3>
+                                <p className="text-gray-500 text-[8px] uppercase font-bold tracking-widest">WebRTC Direct</p>
                             </div>
-                            <GlowButton onClick={startStream} className="w-full py-4 text-[10px] bg-white text-black hover:bg-orange-500 hover:text-white transition-colors">
-                                Fast Sync
+                            <GlowButton onClick={startStream} className="w-full py-3 md:py-4 text-[9px] md:text-[10px] bg-white text-black hover:bg-orange-500 hover:text-white transition-colors">
+                                Uplink Now
                             </GlowButton>
                         </div>
 
-                        <div className="bg-white/5 border border-white/10 p-8 rounded-[32px] hover:border-blue-500/30 transition-all flex flex-col justify-between group/opt">
-                            <div className="text-left mb-6">
-                                <h3 className="text-white font-black uppercase tracking-widest text-sm mb-2">OBS Link</h3>
-                                <p className="text-gray-500 text-[9px] uppercase font-bold tracking-widest">RTMP Professional Protocol</p>
+                        <div className="bg-white/5 border border-white/10 p-6 md:p-8 rounded-[24px] md:rounded-[32px] hover:border-blue-500/30 transition-all flex flex-col justify-between group/opt">
+                            <div className="text-left mb-4 md:mb-6">
+                                <h3 className="text-white font-black uppercase tracking-widest text-[12px] md:text-sm mb-1 md:mb-2">OBS Meta</h3>
+                                <p className="text-gray-500 text-[8px] uppercase font-bold tracking-widest">RTMP Professional</p>
                             </div>
-                            <GlowButton onClick={startOBSStream} className="w-full py-4 text-[10px] bg-blue-600 border-none hover:shadow-blue-600/40 text-white">
+                            <GlowButton onClick={startOBSStream} className="w-full py-3 md:py-4 text-[9px] md:text-[10px] bg-blue-600 border-none hover:shadow-blue-600/40 text-white">
                                 Get Keys
                             </GlowButton>
                         </div>
@@ -366,38 +361,44 @@ export default function BroadcasterDashboard({ room, username }: BroadcasterDash
     if (streamingMode === 'obs' && ingressInfo) {
         return (
             <div className="space-y-6 flex flex-col h-full animate-in zoom-in-95 duration-500">
-                <div className="relative flex-1 bg-neutral-900 rounded-[48px] p-12 overflow-hidden border border-white/5 shadow-2xl flex flex-col items-center justify-center text-center">
-                    <div className="absolute top-8 left-8 flex items-center gap-3">
+                <div className="relative flex-1 bg-neutral-900 rounded-[24px] md:rounded-[48px] p-6 md:p-12 overflow-hidden border border-white/5 shadow-2xl flex flex-col items-center justify-center text-center">
+                    <div className="md:absolute md:top-8 md:left-8 flex items-center justify-center gap-3 mb-8 md:mb-0">
                         <div className="bg-blue-600 px-4 py-2 rounded-xl flex items-center gap-2 border border-blue-400/30">
                             <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
                             <span className="text-[10px] font-black tracking-widest text-white uppercase">RTMP LINK ACTIVE</span>
                         </div>
                     </div>
 
-                    <div className="max-w-xl w-full space-y-8">
+                    <div className="max-w-xl w-full space-y-6 md:space-y-8">
                         <div>
-                            <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-2">Professional Uplink</h2>
-                            <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Input these credentials into OBS Settings → Stream</p>
+                            <h2 className="text-2xl md:text-3xl font-black text-white uppercase tracking-tighter mb-2">Neural Uplink</h2>
+                            <p className="text-gray-500 text-[9px] md:text-[10px] font-black uppercase tracking-widest">Transfer these credentials into OBS</p>
                         </div>
 
                         <div className="space-y-4">
-                            <div className="bg-black/40 border border-white/5 p-6 rounded-3xl text-left">
-                                <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-2">Server URL</p>
-                                <code className="text-orange-400 text-xs font-mono break-all line-clamp-1">{ingressInfo.url}</code>
+                            <div className="bg-black/40 border border-white/5 p-4 md:p-6 rounded-2xl md:rounded-3xl text-left">
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest">Server URL</p>
+                                    <button onClick={() => { navigator.clipboard.writeText(ingressInfo.url); alert("URL Copied"); }} className="text-[8px] text-blue-500 font-black uppercase">Copy</button>
+                                </div>
+                                <code className="text-orange-400 text-[10px] md:text-xs font-mono break-all line-clamp-2 md:line-clamp-1">{ingressInfo.url}</code>
                             </div>
-                            <div className="bg-black/40 border border-white/5 p-6 rounded-3xl text-left relative group/key">
-                                <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest mb-2">Stream Key</p>
-                                <code className="text-orange-400 text-xs font-mono break-all">{ingressInfo.streamKey}</code>
-                                <div className="absolute inset-0 bg-neutral-900 rounded-2xl flex items-center justify-center group-hover/key:opacity-0 transition-opacity cursor-pointer">
-                                    <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Click to reveal sector key</span>
+                            <div className="bg-black/40 border border-white/5 p-4 md:p-6 rounded-2xl md:rounded-3xl text-left relative group/key">
+                                <div className="flex justify-between items-center mb-2">
+                                    <p className="text-[8px] text-gray-500 font-black uppercase tracking-widest">Stream Key</p>
+                                    <button onClick={() => { navigator.clipboard.writeText(ingressInfo.streamKey); alert("Key Copied"); }} className="text-[8px] text-blue-500 font-black uppercase">Copy</button>
+                                </div>
+                                <code className="text-orange-400 text-[10px] md:text-xs font-mono break-all">{ingressInfo.streamKey}</code>
+                                <div className="absolute inset-0 bg-neutral-900 rounded-2xl md:rounded-3xl flex items-center justify-center group-hover/key:opacity-0 transition-opacity cursor-pointer border border-white/5">
+                                    <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Touch to reveal key</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="pt-8">
+                        <div className="pt-4 md:pt-8">
                             <button
                                 onClick={endStream}
-                                className="px-12 py-5 bg-red-600 hover:bg-red-500 text-white rounded-3xl font-black uppercase tracking-widest text-[10px] transition-all"
+                                className="w-full md:w-auto px-12 py-4 md:py-5 bg-red-600 hover:bg-red-500 text-white rounded-2xl md:rounded-3xl font-black uppercase tracking-widest text-[10px] transition-all"
                             >
                                 Terminate Session
                             </button>
@@ -405,15 +406,14 @@ export default function BroadcasterDashboard({ room, username }: BroadcasterDash
                     </div>
                 </div>
 
-                {/* Shared Metrics Bar */}
                 <SharedMetrics revenue={revenue} viewerCount={viewerCount} />
             </div>
         );
     }
 
     return (
-        <div className="space-y-6 flex flex-col h-full animate-in fade-in duration-700">
-            <div className="relative flex-1 bg-black rounded-[48px] overflow-hidden border border-white/5 shadow-2xl">
+        <div className="space-y-4 md:space-y-6 flex flex-col h-full animate-in fade-in duration-700">
+            <div className="relative flex-1 bg-black rounded-[24px] md:rounded-[48px] overflow-hidden border border-white/5 shadow-2xl">
                 <LiveKitRoom
                     video={true}
                     audio={true}
@@ -430,7 +430,6 @@ export default function BroadcasterDashboard({ room, username }: BroadcasterDash
                 </LiveKitRoom>
             </div>
 
-            {/* Metrics Bar */}
             <SharedMetrics revenue={revenue} viewerCount={viewerCount} />
         </div>
     );

@@ -19,15 +19,23 @@ export default function Home() {
   useEffect(() => {
     const storedToken = localStorage.getItem('authToken');
     if (storedToken) {
-      setAuthToken(storedToken);
       try {
         const decodedToken: any = jwt.decode(storedToken);
         if (decodedToken) {
-          setCurrentUser({
-            id: decodedToken.id,
-            public_key: decodedToken.public_key,
-            username: decodedToken.username,
-          });
+          // Check if current wallet matches token
+          if (publicKey && decodedToken.public_key !== publicKey.toBase58()) {
+            console.warn("Wallet mismatch with cached token. Clearing session.");
+            localStorage.removeItem('authToken');
+            setAuthToken(null);
+            setCurrentUser(null);
+          } else {
+            setAuthToken(storedToken);
+            setCurrentUser({
+              id: decodedToken.id,
+              public_key: decodedToken.public_key,
+              username: decodedToken.username,
+            });
+          }
         } else {
           localStorage.removeItem('authToken');
           setAuthToken(null);
@@ -40,7 +48,7 @@ export default function Home() {
       }
     }
     setTokenChecked(true);
-  }, []);
+  }, [publicKey]);
 
   const authenticateWithSolanaAndJWT = useCallback(async () => {
     setLoading(true);

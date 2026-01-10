@@ -185,9 +185,10 @@ function CommunityLiveContent() {
                     {!isBroadcasting && !selectedStream && (
                         <button
                             onClick={() => setIsBroadcasting(true)}
-                            className="bg-orange-600 hover:bg-orange-500 text-white px-8 py-3 rounded-2xl font-black uppercase tracking-widest text-[11px] border border-orange-400/30 transition-all shadow-[0_0_20px_rgba(234,88,12,0.3)] active:scale-95"
+                            className="bg-orange-600 hover:bg-orange-500 text-white px-4 md:px-8 py-2 md:py-3 rounded-xl md:rounded-2xl font-black uppercase tracking-widest text-[9px] md:text-[11px] border border-orange-400/30 transition-all shadow-[0_0_20px_rgba(234,88,12,0.3)] active:scale-95"
                         >
-                            Start Broadcast
+                            <span className="hidden sm:inline">Start Broadcast</span>
+                            <span className="sm:hidden">Go Live</span>
                         </button>
                     )}
                 </motion.header>

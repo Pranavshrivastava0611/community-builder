@@ -1,5 +1,6 @@
 "use client"
 
+import SessionManager from '@/components/SessionManager';
 import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
 import {
@@ -31,6 +32,7 @@ export default function RootLayout({
         <ConnectionProvider endpoint={endpoint}>
           <WalletProvider wallets={wallets} autoConnect>
             <WalletModalProvider>
+              <SessionManager />
               {children}
             </WalletModalProvider>
           </WalletProvider>

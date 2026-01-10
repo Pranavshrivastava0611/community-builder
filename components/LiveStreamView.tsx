@@ -95,7 +95,7 @@ export default function LiveStreamView({ room, username }: LiveStreamViewProps) 
     }
 
     return (
-        <div className="w-full h-full bg-black relative group selection:bg-orange-500/30 rounded-[40px] overflow-hidden">
+        <div className="w-full h-full bg-black relative group selection:bg-orange-500/30 rounded-2xl md:rounded-[40px] overflow-hidden">
             <LiveKitRoom
                 video={false}
                 audio={false}
