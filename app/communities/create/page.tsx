@@ -602,7 +602,7 @@ export default function CreateCommunityPage() {
       // 6. Create Liquidity Pool (Meteora Integration)
       // For now, hardcode initial SOL and token amounts for LP
       const initialSolAmount = 0.1; // 0.1 SOL
-      const initialTokenAmount = 100000000; // 100,000,000 of your new community token
+      const initialTokenAmount = 950000000; // 950,000,000 of your new community token (95% to pool)
       const binStep = 100; // Example bin step
       const feeTier = 0.0005; // Example fee tier (0.05%)
 
