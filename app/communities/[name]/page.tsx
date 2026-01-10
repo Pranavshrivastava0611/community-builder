@@ -6,10 +6,11 @@ import GlassPanel from "@/components/GlassPanel";
 import GlowButton from "@/components/GlowButton";
 import HoldersLeaderboard from "@/components/HoldersLeaderboard";
 import Navbar from "@/components/Navbar";
+import TokenGraph from "@/components/TokenGraph";
 import { supabase } from "@/utils/supabase";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { motion } from "framer-motion";
-import { SignalHigh } from "lucide-react";
+import { Minus, Plus, SignalHigh } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -34,8 +35,10 @@ export default function CommunityDetailPage() {
     const communityName = decodeURIComponent(params!.name as string);
     const router = useRouter();
     const { connected, publicKey } = useWallet();
-    const [activeTab, setActiveTab] = useState<"overview" | "feed" | "chat" | "live">("overview");
+    const [activeTab, setActiveTab] = useState<"overview" | "market" | "feed" | "chat" | "live" | "manage">("overview");
     const [streamStatus, setStreamStatus] = useState<'live' | 'idle'>('idle');
+    const [managementData, setManagementData] = useState<any>(null);
+    const [claiming, setClaiming] = useState(false);
 
     const [community, setCommunity] = useState<CommunityDetail | null>(null);
     const [loading, setLoading] = useState(true);
@@ -86,8 +89,25 @@ export default function CommunityDetailPage() {
             }
         }
 
+        async function fetchManagement() {
+            if (!community?.id || currentUserId !== community.creator_id) return;
+            try {
+                const token = localStorage.getItem("authToken");
+                const res = await fetch(`/api/communities/id/${community.id}/management`, {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setManagementData(data);
+                }
+            } catch (e) {
+                console.error("Management fetch error", e);
+            }
+        }
+
         if (communityName) fetchData();
-    }, [communityName, connected]); // Refetch if wallet connects/auth changes
+        if (community?.id) fetchManagement();
+    }, [communityName, community?.id, connected, currentUserId]); // Refetch if wallet connects/auth changes
 
     useEffect(() => {
         if (!community?.id || !supabase) return;
@@ -151,6 +171,202 @@ export default function CommunityDetailPage() {
             toast.error(error.message);
         } finally {
             setJoining(false);
+        }
+    };
+
+    const handleClaimFees = async () => {
+        if (!connected || !publicKey) return;
+        try {
+            setClaiming(true);
+            const token = localStorage.getItem("authToken");
+            const res = await fetch(`/api/communities/id/${community!.id}/management/claim-fees`, {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to build transaction");
+
+            const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js");
+            const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_CLUSTER_URL || clusterApiUrl("devnet"), "confirmed");
+            const { decode } = await import("bs58");
+
+            const transactions = data.transactions || [data.transaction]; // Handle both array and single (legacy)
+
+            for (const txStr of transactions) {
+                const tx = Transaction.from(decode(txStr));
+                const signature = await (window as any).solana.signAndSendTransaction(tx);
+                await connection.confirmTransaction(signature.signature, "confirmed");
+            }
+
+            toast.success("Successfully claimed all accrued fees!");
+            // Refresh data
+            const mRes = await fetch(`/api/communities/id/${community!.id}/management`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (mRes.ok) setManagementData(await mRes.json());
+
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.message || "Failed to claim fees");
+        } finally {
+            setClaiming(false);
+        }
+    };
+
+    const handleRemoveLiquidity = async (positionKey: string) => {
+        if (!connected || !publicKey) return;
+        try {
+            const token = localStorage.getItem("authToken");
+            const res = await fetch(`/api/communities/id/${community!.id}/liquidity/remove`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    userPublicKey: publicKey.toBase58(),
+                    positionPubKey: positionKey,
+                    bps: 5000, // 50% fixed for now as MVP
+                    shouldClaimAndClose: false
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed");
+
+            const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js");
+            const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_CLUSTER_URL || clusterApiUrl("devnet"), "confirmed");
+            const { decode } = await import("bs58");
+
+            if (data.transactions) {
+                for (const txStr of data.transactions) {
+                    const tx = Transaction.from(decode(txStr));
+                    const signature = await (window as any).solana.signAndSendTransaction(tx);
+                    await connection.confirmTransaction(signature.signature, "confirmed");
+                }
+            }
+
+            toast.success("Liquidity removed successfully!");
+            const mRes = await fetch(`/api/communities/id/${community!.id}/management`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (mRes.ok) setManagementData(await mRes.json());
+
+        } catch (e: any) {
+            toast.error(e.message || "Remove failed");
+        }
+    };
+
+    const handleAddLiquidity = async (positionKey: string) => {
+        if (!connected || !publicKey) return;
+        try {
+            const token = localStorage.getItem("authToken");
+
+            const inputX = window.prompt("Enter amount of SOL to add:", "0.1");
+            if (!inputX || isNaN(Number(inputX))) return;
+
+            const inputY = window.prompt(`Enter amount of ${community?.token_symbol || "TOKEN"} to add:`, "100");
+            if (!inputY || isNaN(Number(inputY))) return;
+
+            toast.loading("Preparing liquidity addition...");
+
+            const res = await fetch(`/api/communities/id/${community!.id}/liquidity/add`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    userPublicKey: publicKey.toBase58(),
+                    positionPubKey: positionKey,
+                    // We send UI amounts now to let backend use correct decimals
+                    uiAmountX: inputX,
+                    uiAmountY: inputY,
+                    // Fallback (legacy/ignored by new backend logic but good for types)
+                    amountX: 0,
+                    amountY: 0,
+                    slippage: 1.0
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed");
+
+            const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js");
+            const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_CLUSTER_URL || clusterApiUrl("devnet"), "confirmed");
+            const { decode } = await import("bs58");
+
+            const tx = Transaction.from(decode(data.transaction));
+            const signature = await (window as any).solana.signAndSendTransaction(tx);
+            await connection.confirmTransaction(signature.signature, "confirmed");
+
+            toast.dismiss();
+            toast.success("Liquidity added successfully!");
+            const mRes = await fetch(`/api/communities/id/${community!.id}/management`, {
+                headers: { "Authorization": `Bearer ${token}` }
+            });
+            if (mRes.ok) setManagementData(await mRes.json());
+
+        } catch (e: any) {
+            toast.dismiss();
+            toast.error(e.message || "Add failed");
+        }
+    };
+
+    const [swapDirection, setSwapDirection] = useState<"buy" | "sell">("buy"); // buy = SOL -> Token, sell = Token -> SOL
+
+    const handleSwap = async (amount: string) => {
+        if (!connected || !publicKey) {
+            toast.error("Connect wallet to swap");
+            return;
+        }
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+            toast.error("Enter valid amount");
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem("authToken");
+            const inToken = swapDirection === "buy"
+                ? "So11111111111111111111111111111111111111112" // WSOL
+                : community!.token_mint_address;
+
+            // If buying (User sells SOL), amount is in SOL (9 decimals)
+            // If selling (User sells Token), amount is in Token (Assume 9 for simple if missing, but usually 6 or 9. We'll use 9 default or generic)
+            // Ideally we fetch decimals. For now assuming 9 for generic standard or same as SOL.
+            const decimals = 9;
+            const inAmount = Math.floor(Number(amount) * Math.pow(10, decimals));
+
+            const res = await fetch(`/api/communities/id/${community!.id}/swap`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    userPublicKey: publicKey.toBase58(),
+                    inToken,
+                    inAmount,
+                    slippage: 1.0
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Swap failed");
+
+            const { Connection, clusterApiUrl, Transaction } = await import("@solana/web3.js");
+            const connection = new Connection(process.env.NEXT_PUBLIC_SOLANA_CLUSTER_URL || clusterApiUrl("devnet"), "confirmed");
+            const { decode } = await import("bs58");
+
+            const tx = Transaction.from(decode(data.transaction));
+            const signature = await (window as any).solana.signAndSendTransaction(tx);
+            await connection.confirmTransaction(signature.signature, "confirmed");
+
+            toast.success(`Swapped ${amount} SOL successfully!`);
+
+        } catch (e: any) {
+            console.error(e);
+            toast.error(e.message || "Swap failed");
         }
     };
 
@@ -227,6 +443,12 @@ export default function CommunityDetailPage() {
                                 Overview
                             </button>
                             <button
+                                onClick={() => setActiveTab("market")}
+                                className={`pb-3 text-lg font-bold transition-colors ${activeTab === "market" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
+                            >
+                                Market
+                            </button>
+                            <button
                                 onClick={() => setActiveTab("feed")}
                                 className={`pb-3 text-lg font-bold transition-colors ${activeTab === "feed" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
                             >
@@ -258,6 +480,14 @@ export default function CommunityDetailPage() {
                                     </span>
                                 )}
                             </button>
+                            {community.creator_id === currentUserId && (
+                                <button
+                                    onClick={() => setActiveTab("manage")}
+                                    className={`pb-3 text-lg font-bold transition-colors ${activeTab === "manage" ? "text-orange-400 border-b-2 border-orange-400" : "text-gray-500 hover:text-white"}`}
+                                >
+                                    Admin
+                                </button>
+                            )}
                         </div>
 
                         {activeTab === "overview" && (
@@ -283,6 +513,157 @@ export default function CommunityDetailPage() {
                                 isMember={community.isJoined}
                                 recipientWallet={creatorWallet}
                             />
+                        )}
+
+                        {activeTab === "market" && (
+                            <div className="space-y-6">
+                                <GlassPanel className="p-8 rounded-[2.5rem] border border-white/10 bg-black/40 shadow-2xl overflow-hidden relative">
+                                    <div className="absolute top-0 right-0 p-4">
+                                        <div className="flex items-center gap-2 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+                                            <span className="text-[9px] font-black uppercase text-orange-400">Live Nexus Data</span>
+                                        </div>
+                                    </div>
+                                    <TokenGraph
+                                        communityId={community.id}
+                                        tokenSymbol={community.token_symbol || "TOKEN"}
+                                    />
+                                </GlassPanel>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* Swap Card */}
+                                    <GlassPanel className="p-6 rounded-3xl border border-white/5 bg-white/5 relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="bg-green-500/20 text-green-400 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded">
+                                                Active
+                                            </div>
+                                        </div>
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-4">Instant Swap</h4>
+                                        <div className="space-y-4">
+                                            <div className="bg-black/40 rounded-xl p-3 border border-white/5">
+                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                                                    Sell ({swapDirection === "buy" ? "SOL" : (community.token_symbol || "TOKEN")})
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    id="swapInputApi"
+                                                    placeholder="0.0"
+                                                    className="w-full bg-transparent text-white font-mono font-bold outline-none placeholder:text-gray-700"
+                                                />
+                                            </div>
+                                            <div className="flex justify-center -my-2 relative z-10">
+                                                <button
+                                                    onClick={() => setSwapDirection(prev => prev === "buy" ? "sell" : "buy")}
+                                                    className="bg-white/10 p-1 rounded-full backdrop-blur-md hover:bg-white/20 transition-all cursor-pointer"
+                                                >
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-400 transform hover:rotate-180 transition-transform"><path d="m16 3 4 4-4 4" /><path d="M20 7H4" /><path d="m8 21-4-4 4-4" /><path d="M4 17h16" /></svg>
+                                                </button>
+                                            </div>
+                                            <div className="bg-black/40 rounded-xl p-3 border border-white/5">
+                                                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">
+                                                    Buy ({swapDirection === "buy" ? (community.token_symbol || "TOKEN") : "SOL"})
+                                                </label>
+                                                <div className="w-full text-gray-500 font-mono font-bold text-sm">
+                                                    Calculated at Sign
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const val = (document.getElementById("swapInputApi") as HTMLInputElement).value;
+                                                    handleSwap(val);
+                                                }}
+                                                className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-black font-black uppercase tracking-widest text-xs rounded-xl transition-all"
+                                            >
+                                                Swap Now
+                                            </button>
+                                        </div>
+                                    </GlassPanel>
+
+                                    {/* Quick Adds (Placeholder for now, focused on Swap) */}
+                                    <GlassPanel className="p-6 rounded-3xl border border-white/5 bg-white/5 flex flex-col justify-center items-center text-center">
+                                        <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Liquidity Provider</h4>
+                                        <p className="text-xs text-gray-400 mb-6 max-w-[200px]">Earn fees by providing liquidity to the {community.token_symbol} pool.</p>
+                                        <button className="px-6 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-white font-bold text-xs uppercase tracking-widest transition-all">
+                                            Add Liquidity
+                                        </button>
+                                    </GlassPanel>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === "manage" && managementData && (
+                            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <GlassPanel className="p-8 rounded-[2.5rem] border border-orange-500/20 bg-orange-500/5 backdrop-blur-2xl">
+                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-orange-400 mb-6">Accrued Swap Fees</h3>
+                                        <div className="space-y-4 mb-8">
+                                            <div className="flex justify-between items-center group">
+                                                <span className="text-gray-400 text-sm font-bold uppercase tracking-tighter">{managementData.totalFees.xSymbol}</span>
+                                                <span className="text-2xl font-black text-white group-hover:text-orange-400 transition-colors">{(managementData.totalFees.x || 0).toFixed(6)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center group">
+                                                <span className="text-gray-400 text-sm font-bold uppercase tracking-tighter">{managementData.totalFees.ySymbol}</span>
+                                                <span className="text-2xl font-black text-white group-hover:text-orange-400 transition-colors">{(managementData.totalFees.y || 0).toFixed(6)}</span>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={handleClaimFees}
+                                            disabled={claiming || (managementData.totalFees.x === 0 && managementData.totalFees.y === 0)}
+                                            className="w-full py-5 bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-orange-500 hover:text-white transition-all disabled:opacity-50 disabled:grayscale"
+                                        >
+                                            {claiming ? "Processing Nexus..." : "Claim All Revenue"}
+                                        </button>
+                                    </GlassPanel>
+
+                                    <GlassPanel className="p-8 rounded-[2.5rem] border border-white/10 bg-white/5">
+                                        <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6">Management Interface</h3>
+                                        <div className="space-y-4">
+                                            <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                                                <div className="text-xs font-black text-white uppercase mb-1">Fee Tier</div>
+                                                <div className="text-orange-400 text-sm font-bold">0.05% Dynamic</div>
+                                            </div>
+                                            <div className="p-4 rounded-2xl bg-black/40 border border-white/5">
+                                                <div className="text-xs font-black text-white uppercase mb-1">Pool Governance</div>
+                                                <div className="text-blue-400 text-sm font-bold italic tracking-tighter">Automatic Bin Management Enabled</div>
+                                            </div>
+                                        </div>
+                                    </GlassPanel>
+                                </div>
+
+                                <GlassPanel className="p-8 rounded-[2.5rem] border border-white/10 bg-white/5">
+                                    <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-6">Active Positions</h3>
+                                    <div className="space-y-3">
+                                        {managementData.positions.map((pos: any) => (
+                                            <div key={pos.publicKey} className="flex justify-between items-center p-4 rounded-xl bg-black/20 border border-white/5 hover:border-white/20 transition-all">
+                                                <div className="flex gap-2 mr-3">
+                                                    <button
+                                                        onClick={() => handleAddLiquidity(pos.publicKey)}
+                                                        className="w-8 h-8 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center hover:bg-green-500 hover:text-white transition-colors"
+                                                        title="Add Liquidity (0.2 SOL)"
+                                                    >
+                                                        <Plus size={14} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleRemoveLiquidity(pos.publicKey)}
+                                                        className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-colors"
+                                                        title="Remove 50% Liquidity"
+                                                    >
+                                                        <Minus size={14} />
+                                                    </button>
+                                                </div>
+                                                <div className="flex flex-col flex-1">
+                                                    <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest mb-1">Position Link</span>
+                                                    <span className="text-[10px] font-mono text-gray-400">{pos.publicKey.slice(0, 8)}...{pos.publicKey.slice(-8)}</span>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-[10px] font-black text-gray-600 uppercase mb-1">Pending</div>
+                                                    <div className="text-xs font-black text-white">{(pos.feesX || 0).toFixed(4)} / {(pos.feesY || 0).toFixed(4)}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </GlassPanel>
+                            </div>
                         )}
 
                         {activeTab === "live" && (
