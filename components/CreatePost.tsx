@@ -114,22 +114,24 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
         setUploading(true);
         try {
             const fileExt = file.name.split('.').pop();
+            const isVideo = file.type.startsWith('video/');
+            const bucketName = isVideo ? 'video' : 'images';
             const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-            const filePath = `post-media/${fileName}`;
+            const filePath = `${isVideo ? 'video' : 'image'}-media/${fileName}`;
 
             const { data, error } = await supabase.storage
-                .from('posts')
+                .from(bucketName)
                 .upload(filePath, file);
 
             if (error) throw error;
 
             const { data: { publicUrl } } = supabase.storage
-                .from('posts')
+                .from(bucketName)
                 .getPublicUrl(filePath);
 
             setImageUrl(publicUrl);
             setShowImageInput(true);
-            toast.success("File uploaded!");
+            toast.success(`${isVideo ? 'Video' : 'Image'} uploaded!`);
         } catch (error: any) {
             toast.error("Upload failed: " + error.message);
             console.error(error);
@@ -263,12 +265,20 @@ export default function CreatePost({ communityId, onPostCreated, isMember = true
                                 />
                                 {imageUrl && (
                                     <div className="relative group/img rounded-2xl overflow-hidden border border-white/10 aspect-video bg-black/20">
-                                        <img
-                                            src={imageUrl}
-                                            alt="Preview"
-                                            className="w-full h-full object-cover"
-                                            onError={() => toast.error("Invalid image URL")}
-                                        />
+                                        {(imageUrl.match(/\.(mp4|webm|ogg)$/i) || imageUrl.includes('video-media')) ? (
+                                            <video
+                                                src={imageUrl}
+                                                controls
+                                                className="w-full h-full object-contain"
+                                            />
+                                        ) : (
+                                            <img
+                                                src={imageUrl}
+                                                alt="Preview"
+                                                className="w-full h-full object-cover"
+                                                onError={() => toast.error("Invalid image URL")}
+                                            />
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => setImageUrl("")}

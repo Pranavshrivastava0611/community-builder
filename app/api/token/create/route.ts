@@ -56,7 +56,7 @@ export async function POST(req: Request) {
     console.log('Authenticated user ID:', creatorPublicKey.toBase58());
 
     // 2. Extract token creation parameters from request body
-    const { communityId, tokenSymbol, tokenDecimals, initialSupply, mintAuthority, freezeAuthority, payerPublicKey } = await req.json();
+    const { communityId, tokenName, tokenSymbol, tokenMetadataUri, tokenDecimals, initialSupply, mintAuthority, freezeAuthority, payerPublicKey } = await req.json();
 
     if (!tokenSymbol || tokenDecimals === undefined || initialSupply === undefined || !payerPublicKey) {
       return NextResponse.json({ error: 'Missing token creation parameters' }, { status: 400 });
@@ -137,6 +137,83 @@ export async function POST(req: Request) {
           [], // Signers if any, but mint authority is enough
           TOKEN_PROGRAM_ID
         )
+      );
+    }
+
+    // 4b. Create Metadata Account (Metaplex)
+    if (tokenName && tokenMetadataUri) {
+      const METADATA_PROGRAM_ID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+      
+      const [metadataPDA] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from("metadata"),
+          METADATA_PROGRAM_ID.toBuffer(),
+          mintKeypair.publicKey.toBuffer(),
+        ],
+        METADATA_PROGRAM_ID
+      );
+
+      // Manual Borsh-style serialization for CreateMetadataAccountV3
+      const nameBuf = Buffer.from(tokenName.slice(0, 32));
+      const symbolBuf = Buffer.from(tokenSymbol.slice(0, 10));
+      const uriBuf = Buffer.from(tokenMetadataUri.slice(0, 200));
+
+      // Calculate buffer size: 
+      // 1 (disc) + 4+name + 4+symbol + 4+uri + 2 (fee) + 1 (opt creator) + 1 (opt collection) + 1 (opt uses) + 1 (isMutable) + 1 (opt collectionDetails)
+      const dataSize = 1 + (4 + nameBuf.length) + (4 + symbolBuf.length) + (4 + uriBuf.length) + 2 + 1 + 1 + 1 + 1 + 1;
+      const data = Buffer.alloc(dataSize);
+      let offset = 0;
+
+      data.writeUInt8(33, offset); // Discriminator for CreateMetadataAccountV3
+      offset += 1;
+
+      // DataV2 part
+      data.writeUInt32LE(nameBuf.length, offset);
+      offset += 4;
+      nameBuf.copy(data, offset);
+      offset += nameBuf.length;
+
+      data.writeUInt32LE(symbolBuf.length, offset);
+      offset += 4;
+      symbolBuf.copy(data, offset);
+      offset += symbolBuf.length;
+
+      data.writeUInt32LE(uriBuf.length, offset);
+      offset += 4;
+      uriBuf.copy(data, offset);
+      offset += uriBuf.length;
+
+      data.writeUInt16LE(0, offset); // sellerFeeBasisPoints
+      offset += 2;
+
+      data.writeUInt8(0, offset); // creators: None
+      offset += 1;
+      data.writeUInt8(0, offset); // collection: None
+      offset += 1;
+      data.writeUInt8(0, offset); // uses: None
+      offset += 1;
+
+      data.writeUInt8(1, offset); // isMutable: True
+      offset += 1;
+      data.writeUInt8(0, offset); // collectionDetails: None
+      offset += 1;
+
+      const { TransactionInstruction } = await import('@solana/web3.js');
+      
+      transaction.add(
+        new TransactionInstruction({
+          keys: [
+            { pubkey: metadataPDA, isSigner: false, isWritable: true },
+            { pubkey: mintKeypair.publicKey, isSigner: false, isWritable: false },
+            { pubkey: mintAuthorityPubkey, isSigner: true, isWritable: false },
+            { pubkey: userPayerPublicKey, isSigner: true, isWritable: true },
+            { pubkey: userPayerPublicKey, isSigner: false, isWritable: false }, // updateAuthority
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: new PublicKey("SysvarRent111111111111111111111111111111111"), isSigner: false, isWritable: false },
+          ],
+          programId: METADATA_PROGRAM_ID,
+          data: data,
+        })
       );
     }
 

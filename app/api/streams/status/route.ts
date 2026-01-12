@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
     const room = request.nextUrl.searchParams.get("room");
     const communityId = request.nextUrl.searchParams.get("communityId");
+    const streamerId = request.nextUrl.searchParams.get("streamerId");
 
     if (communityId) {
         // Fetch all active streams for a community
@@ -73,7 +74,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ streams: data || [] });
     }
 
-    if (!room) return NextResponse.json({ error: "Room or communityId required" }, { status: 400 });
+    if (streamerId) {
+        const { data, error } = await supabaseAdmin
+            .from("live_streams")
+            .select("*")
+            .eq("streamer_id", streamerId)
+            .eq("status", "live")
+            .maybeSingle();
+        
+        return NextResponse.json({ stream: data });
+    }
+
+    if (!room) return NextResponse.json({ error: "Room, communityId, or streamerId required" }, { status: 400 });
 
     const { data, error } = await supabaseAdmin
         .from("live_streams")

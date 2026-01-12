@@ -50,6 +50,7 @@ export async function POST(req: Request) {
       image_url,
       token_mint_address,
       token_metadata_uri,
+      token_symbol,
     } = await req.json();
 
     if (!name || !description || !image_url || !token_mint_address || !token_metadata_uri) {
@@ -81,6 +82,7 @@ export async function POST(req: Request) {
         image_url,
         token_mint_address,
         token_metadata_uri,
+        token_symbol,
         creator_id: creatorProfileId, // Associate community with the creator
       })
       .select('id')

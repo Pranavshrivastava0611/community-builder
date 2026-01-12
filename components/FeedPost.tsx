@@ -309,12 +309,27 @@ export default function FeedPost({ post: initialPost, onLikeToggle, onDetailView
                             e.preventDefault();
                             setShowNsfwConfirm(true);
                         } else {
+                            if (post.image_url?.match(/\.(mp4|webm|ogg)$/i) || post.image_url?.includes('video-media')) {
+                                // If it's a video, maybe don't navigate on click if we want it to be playable?
+                                // Actually, for feed consistency, we navigate.
+                            }
                             handleDetailClick(e);
                         }
                     }}
                     className={`w-full aspect-[4/5] sm:aspect-square bg-neutral-900 rounded-sm border border-white/5 overflow-hidden mb-3 block cursor-pointer group relative ${post.is_nsfw && !isRevealed ? 'overflow-hidden' : ''}`}
                 >
-                    <img src={post.image_url} alt="" className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-700 ${post.is_nsfw && !isRevealed ? 'blur-[40px] grayscale brightness-50' : ''}`} />
+                    {(post.image_url.match(/\.(mp4|webm|ogg)$/i) || post.image_url.includes('video-media')) ? (
+                        <video
+                            src={post.image_url}
+                            muted
+                            loop
+                            autoPlay
+                            playsInline
+                            className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-700 ${post.is_nsfw && !isRevealed ? 'blur-[40px] grayscale brightness-50' : ''}`}
+                        />
+                    ) : (
+                        <img src={post.image_url} alt="" className={`w-full h-full object-cover group-hover:scale-105 transition-all duration-700 ${post.is_nsfw && !isRevealed ? 'blur-[40px] grayscale brightness-50' : ''}`} />
+                    )}
 
                     {post.is_nsfw && !isRevealed && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/40">

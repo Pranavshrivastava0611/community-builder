@@ -20,6 +20,7 @@ interface Community {
 export default function CommunityPage() {
   const [communities, setCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     async function fetchCommunities() {
@@ -38,6 +39,11 @@ export default function CommunityPage() {
 
     fetchCommunities();
   }, []);
+
+  const filteredCommunities = communities.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.description.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-black text-white font-sans relative overflow-hidden selection:bg-orange-500/30">
@@ -69,40 +75,67 @@ export default function CommunityPage() {
 
         {/* Main Section */}
         <div className="flex-1">
+          {/* Revenue Upsell Banner */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mb-12 relative group rounded-[2.5rem] overflow-hidden border border-orange-500/20 bg-gradient-to-r from-orange-600/10 via-black to-black p-8 md:p-12 shadow-2xl"
+          >
+            <div className="absolute top-0 right-0 p-6 md:p-10 pointer-events-none opacity-20 group-hover:opacity-40 transition-opacity">
+              <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-orange-500 animate-pulse">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+            </div>
+
+            <div className="relative z-10 max-w-2xl">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-orange-600/20 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-widest mb-6">
+                Creator Economy 2.0
+              </span>
+              <h2 className="text-3xl md:text-5xl font-black text-white leading-tight tracking-tighter mb-6">
+                Be the <span className="text-orange-500">Founder.</span> <br />
+                Build Value, <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500">Earn SOL.</span>
+              </h2>
+              <p className="text-gray-400 text-sm md:text-lg mb-8 leading-relaxed font-medium">
+                Every community member earns you revenue. Create your own utility token, launch a liquidity pool on Meteora, and capture a 1.5% fee on every single transmission and trade.
+              </p>
+
+              <Link href="/communities/create">
+                <GlowButton className="px-10 py-5 text-sm">
+                  Launch Your Empire
+                </GlowButton>
+              </Link>
+            </div>
+          </motion.div>
+
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-center mb-12 gap-6">
             <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-5xl sm:text-6xl font-black font-heading text-white text-center sm:text-left tracking-tighter"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="text-4xl sm:text-5xl font-black font-heading text-white text-center sm:text-left tracking-tighter"
             >
-              Explore{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-200">
-                Communities
-              </span>
+              Uplink <span className="text-orange-500">Directory</span>
             </motion.h2>
 
-            {/* Search Bar */}
-            <div className="w-full sm:w-96 relative group">
-              <input
-                type="text"
-                placeholder="Search communities..."
-                className="w-full px-6 py-3 rounded-full bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-300 pl-12 shadow-sm group-hover:bg-white/10"
-              />
-              <svg
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-hover:text-orange-400 transition-colors"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                ></path>
-              </svg>
+            <div className="flex items-center gap-4 w-full sm:w-auto">
+              {/* Search Bar */}
+              <div className="flex-1 sm:w-80 relative group">
+                <input
+                  type="text"
+                  placeholder="Scan frequencies..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 transition-all duration-300 pl-12 shadow-sm group-hover:bg-white/10 font-mono text-sm"
+                />
+                <svg
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-hover:text-orange-400 transition-colors"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+              </div>
             </div>
           </div>
 
@@ -111,9 +144,9 @@ export default function CommunityPage() {
             <div className="text-center py-20 text-gray-400 animate-pulse">
               Loading communities...
             </div>
-          ) : communities.length === 0 ? (
+          ) : filteredCommunities.length === 0 ? (
             <div className="text-center py-20 text-gray-400">
-              No communities found. Be the first to create one!
+              No matching frequencies detected.
             </div>
           ) : (
             <motion.div
@@ -122,7 +155,7 @@ export default function CommunityPage() {
               transition={{ staggerChildren: 0.15 }}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10"
             >
-              {communities.map((c) => (
+              {filteredCommunities.map((c) => (
                 <Link href={`/communities/${c.name}`} key={c.id}>
                   <motion.div
                     whileHover={{

@@ -35,13 +35,28 @@ function StreamRenderer() {
     return (
         <div className="w-full h-full relative bg-black">
             {tracks.length > 0 ? (
-                <div className="w-full h-full grid grid-cols-1">
-                    {tracks.map((track) => (
-                        <ParticipantTile
-                            key={`${track.participant.identity}-${track.source}`}
-                            trackRef={track}
-                        />
-                    ))}
+                <div className="w-full h-full relative">
+                    {(() => {
+                        const screenShareTrack = tracks.find(t => t.source === Track.Source.ScreenShare);
+                        const cameraTrack = tracks.find(t => t.source === Track.Source.Camera);
+
+                        if (screenShareTrack) {
+                            return (
+                                <>
+                                    <ParticipantTile trackRef={screenShareTrack} className="h-full w-full object-contain bg-neutral-900" />
+                                    {cameraTrack && (
+                                        <div className="absolute bottom-6 left-6 w-28 h-40 md:w-36 md:h-52 rounded-2xl overflow-hidden border-2 border-orange-500 shadow-2xl z-20 animate-in fade-in slide-in-from-left-4 duration-500 bg-black">
+                                            <ParticipantTile trackRef={cameraTrack} className="h-full w-full object-cover" />
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        }
+
+                        return cameraTrack ? (
+                            <ParticipantTile trackRef={cameraTrack} className="h-full w-full object-cover" />
+                        ) : null;
+                    })()}
                 </div>
             ) : (
                 <div className="flex flex-col items-center justify-center h-full bg-neutral-950">

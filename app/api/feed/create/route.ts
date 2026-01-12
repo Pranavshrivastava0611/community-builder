@@ -90,13 +90,14 @@ export async function POST(req: Request) {
     }
 
     // 4. Insert Post
+    const isVideo = imageUrl?.match(/\.(mp4|webm|ogg)$/i) || imageUrl?.includes('video-media');
     const { data: postData, error: postError } = await supabaseAdmin
         .from("posts")
         .insert({
             community_id: communityId,
             author_id: userId,
             content,
-            post_type: imageUrl ? 'image' : 'text',
+            post_type: imageUrl ? (isVideo ? 'video' : 'image') : 'text',
             tags: tags || [],
             is_nsfw: isNsfw || false
         })
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Failed to create post" }, { status: 500 });
     }
 
-    // 5. Handle Image (if exists)
+    // 5. Handle Image/Video (if exists)
     if (imageUrl) {
         const { error: mediaError } = await supabaseAdmin
             .from("media")
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
                 post_id: postData.id,
                 community_id: communityId,
                 uploader_id: userId,
-                media_type: 'image',
+                media_type: isVideo ? 'video' : 'image',
                 file_url: imageUrl
             });
 

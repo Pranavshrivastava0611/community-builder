@@ -54,7 +54,16 @@ export default function PostModal({ post, isOpen, onClose, onLikeToggle }: PostM
                         {/* Left Side: Media */}
                         <div className="w-full lg:w-3/5 bg-black flex items-center justify-center border-b lg:border-b-0 lg:border-r border-white/10 overflow-hidden relative group">
                             {post.image_url ? (
-                                <img src={post.image_url} alt="" className="w-full h-full object-contain" />
+                                (post.image_url.match(/\.(mp4|webm|ogg)$/i) || post.image_url.includes('video-media')) ? (
+                                    <video
+                                        src={post.image_url}
+                                        controls
+                                        autoPlay
+                                        className="w-full h-full object-contain"
+                                    />
+                                ) : (
+                                    <img src={post.image_url} alt="" className="w-full h-full object-contain" />
+                                )
                             ) : (
                                 <div className="p-12 text-center">
                                     <p className="text-3xl font-medium tracking-tight italic text-white/90 leading-relaxed font-sans">

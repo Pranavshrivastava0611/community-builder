@@ -498,6 +498,8 @@ export default function CreateCommunityPage() {
         body: JSON.stringify({
           // communityId is not available yet, will be added in backend `community/create`
           tokenSymbol,
+          tokenName: communityName, // Pass the community name as token name
+          tokenMetadataUri, // Pass the IPFS metadata URI
           tokenDecimals: parseInt(tokenDecimals),
           initialSupply: parseFloat(initialSupply),
           mintAuthority,
@@ -578,6 +580,7 @@ export default function CreateCommunityPage() {
             image_url: communityImageUri,
             token_mint_address: tokenMintAddress,
             token_metadata_uri: tokenMetadataUri,
+            token_symbol: tokenSymbol,
           }),
         });
 
